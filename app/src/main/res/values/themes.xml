@@ -1,7 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.Bridge">
-        <!-- Customize your theme here -->
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowActionBar">false</item>
+    <!-- Inherit directly from Theme.Material3.DayNight.NoActionBar to avoid missing bridge references -->
+    <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize colors if needed -->
+        <item name="colorPrimary">#1B4F72</item>
+        <item name="colorSecondary">#2874A6</item>
     </style>
 </resources>

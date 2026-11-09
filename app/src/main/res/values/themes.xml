@@ -1,8 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Inherit directly from Theme.Material3.DayNight.NoActionBar to avoid missing bridge references -->
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize colors if needed -->
-        <item name="colorPrimary">#1B4F72</item>
-        <item name="colorSecondary">#2874A6</item>
+    <!-- Inherit from the base Android Material Light theme to guarantee attributes are available -->
+    <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Define primary and secondary colors using standard android color attributes -->
+        <item name="android:colorPrimary">#1B4F72</item>
+        <item name="android:colorSecondary">#2874A6</item>
     </style>
 </resources>

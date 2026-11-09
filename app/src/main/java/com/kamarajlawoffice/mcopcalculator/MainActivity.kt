@@ -870,10 +870,9 @@ object McopExportManager {
         context.startActivity(Intent.createChooser(intent, "Share Summary"))
     }
 
-    fun exportCsvForSheets(context: Context, state: McopInputState, result: McopCalculationResult) {
+   fun exportCsvForSheets(context: Context, state: McopInputState, result: McopCalculationResult) {
         try {
-            val csvHeader = "MCOP_No,Name,Age,Mode,Net_Annual_Income,Multiplier,Net_Award,Total_Payable_Today,Lok_Adalat_Offer,NPV_Ceiling
-"
+            val csvHeader = "MCOP_No,Name,Age,Mode,Net_Annual_Income,Multiplier,Net_Award,Total_Payable_Today,Lok_Adalat_Offer,NPV_Ceiling\n"
             val csvRow = listOf(
                 state.mcopNumber, state.claimantName.replace(",", " "), state.age, state.claimMode.label,
                 result.netAnnualIncome.roundToLong().toString(), result.multiplier.toString(),

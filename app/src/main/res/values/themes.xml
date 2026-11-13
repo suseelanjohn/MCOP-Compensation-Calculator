@@ -1,8 +1,8 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Inherit from the base Android Material Light theme to guarantee attributes are available -->
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="android:Theme.Material.Light.NoActionBar">
-        <!-- Define primary and secondary colors using standard android color attributes -->
-        <item name="android:colorPrimary">#1B4F72</item>
-        <item name="android:colorSecondary">#2874A6</item>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MCOPCalculator" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#1B4F72</item>
+        <item name="android:navigationBarColor">#1B4F72</item>
+        <item name="android:windowBackground">#1B4F72</item>
     </style>
 </resources>

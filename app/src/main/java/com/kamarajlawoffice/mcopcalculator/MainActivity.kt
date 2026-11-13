@@ -303,7 +303,7 @@ fun calculateCompensation(
         }
         ClaimMode.PERMANENT -> {
             val lossOfEarningCapacity = annualIncome * prospectsFactor * (disabilityPercent / 100.0) * multiplier
-            heads.add(HeadBifurcation("Loss of Earning Capacity (${disabilityPercent.toInt()}\% • Mult: $multiplier)", lossOfEarningCapacity))
+            heads.add(HeadBifurcation("Loss of Earning Capacity (${disabilityPercent.toInt()}% • Mult: $multiplier)", lossOfEarningCapacity))
             if (lossOfIncomeMonths > 0 && monthlyIncome > 0) {
                 heads.add(HeadBifurcation("Loss of Income During Treatment (${lossOfIncomeMonths.toInt()} Mos)", monthlyIncome * lossOfIncomeMonths))
             }
@@ -318,7 +318,7 @@ fun calculateCompensation(
         }
         ClaimMode.PARTIAL -> {
             val disabilityAward = disabilityPercent * ratePerPercentage
-            heads.add(HeadBifurcation("Permanent Disability (${disabilityPercent.toInt()}\% × ₹${ratePerPercentage.toInt()})", disabilityAward))
+            heads.add(HeadBifurcation("Permanent Disability (${disabilityPercent.toInt()}% × ₹${ratePerPercentage.toInt()})", disabilityAward))
             if (lossOfIncomeMonths > 0 && monthlyIncome > 0) {
                 heads.add(HeadBifurcation("Loss of Income During Treatment (${lossOfIncomeMonths.toInt()} Mos)", monthlyIncome * lossOfIncomeMonths))
             }
@@ -724,4 +724,1007 @@ fun McopCalculatorApp() {
                         ClaimMode.FATAL -> {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(
-                                    value = dependentsStr
+                                    value = dependentsStr,
+                                    onValueChange = { dependentsStr = it },
+                                    label = { Text("No. of Dependents") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = prospectsStr,
+                                    onValueChange = { prospectsStr = it },
+                                    label = { Text("Future Prospects %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Pranay Sethi 10% Escalation (Every 3 Yrs on Consortium/Estate/Funeral)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryNavy
+                            )
+                            val stepOptions = listOf("Base (₹40k)", "+10% (₹44k)", "+21% (₹48.4k)", "+33% (₹53.2k)")
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                stepOptions.forEachIndexed { idx, label ->
+                                    SegmentedButton(
+                                        selected = pranaySethiSteps == idx,
+                                        onClick = { pranaySethiSteps = idx },
+                                        shape = SegmentedButtonDefaults.itemShape(index = idx, count = stepOptions.size)
+                                    ) {
+                                        Text(label, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                        ClaimMode.PERMANENT -> {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = disabilityStr,
+                                    onValueChange = { disabilityStr = it },
+                                    label = { Text("Functional Disab. %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = prospectsStr,
+                                    onValueChange = { prospectsStr = it },
+                                    label = { Text("Future Prospects %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        ClaimMode.PARTIAL -> {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = disabilityStr,
+                                    onValueChange = { disabilityStr = it },
+                                    label = { Text("Disability %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = ratePerPctStr,
+                                    onValueChange = { ratePerPctStr = it },
+                                    label = { Text("Rate per % (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        ClaimMode.TEMPORARY -> {
+                            OutlinedTextField(
+                                value = tempInjuryCompStr,
+                                onValueChange = { tempInjuryCompStr = it },
+                                label = { Text("Injury Compensation (For Injuries Sustained ₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. All Conventional & Pecuniary Heads Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (selectedMode == ClaimMode.FATAL) "2. FATAL PECUNIARY HEADS & INTEREST" else "2. ALL INJURY CONVENTIONAL HEADS & INTEREST",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 13.sp
+                    )
+
+                    if (selectedMode == ClaimMode.FATAL) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = transportStr,
+                                onValueChange = { transportStr = it },
+                                label = { Text("Transport/Ambulance (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = medicalStr,
+                                onValueChange = { medicalStr = it },
+                                label = { Text("Pre-Death Medical (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+                        OutlinedTextField(
+                            value = clothingDamageStr,
+                            onValueChange = { clothingDamageStr = it },
+                            label = { Text("Damage to Clothing & Articles (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    } else {
+                        // Complete set of Injury Heads
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = lossOfIncomeMonthsStr,
+                                onValueChange = { lossOfIncomeMonthsStr = it },
+                                label = { Text("Treatment Loss (Months)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = painSufferingStr,
+                                onValueChange = { painSufferingStr = it },
+                                label = { Text("Pain & Suffering (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = medicalStr,
+                                onValueChange = { medicalStr = it },
+                                label = { Text("Medical Bills (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            if (selectedMode != ClaimMode.TEMPORARY) {
+                                OutlinedTextField(
+                                    value = futureMedicalStr,
+                                    onValueChange = { futureMedicalStr = it },
+                                    label = { Text("Future Medical (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            } else {
+                                OutlinedTextField(
+                                    value = transportStr,
+                                    onValueChange = { transportStr = it },
+                                    label = { Text("Transportation (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+
+                        if (selectedMode != ClaimMode.TEMPORARY) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = transportStr,
+                                    onValueChange = { transportStr = it },
+                                    label = { Text("Transportation (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = nourishmentStr,
+                                    onValueChange = { nourishmentStr = it },
+                                    label = { Text("Extra Nourishment (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        } else {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = nourishmentStr,
+                                    onValueChange = { nourishmentStr = it },
+                                    label = { Text("Extra Nourishment (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = attendantStr,
+                                    onValueChange = { attendantStr = it },
+                                    label = { Text("Attendant Charges (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (selectedMode != ClaimMode.TEMPORARY) {
+                                OutlinedTextField(
+                                    value = attendantStr,
+                                    onValueChange = { attendantStr = it },
+                                    label = { Text("Attendant Charges (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                            OutlinedTextField(
+                                value = clothingDamageStr,
+                                onValueChange = { clothingDamageStr = it },
+                                label = { Text("Damage to Clothing (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+
+                        if (selectedMode != ClaimMode.TEMPORARY) {
+                            OutlinedTextField(
+                                value = amenitiesStr,
+                                onValueChange = { amenitiesStr = it },
+                                label = { Text("Loss of Amenities / Marriage Prospects (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = petitionDateLabel,
+                            onValueChange = { petitionDateLabel = it },
+                            label = { Text("Petition Date") },
+                            modifier = Modifier.weight(1.2f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = daysStr,
+                            onValueChange = { daysStr = it },
+                            label = { Text("Days") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(0.8f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = interestRateStr,
+                            onValueChange = { interestRateStr = it },
+                            label = { Text("Int %") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(0.8f),
+                            singleLine = true
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = customOfferStr,
+                        onValueChange = { customOfferStr = it },
+                        label = { Text("Custom Lok Adalat Offer ₹ (Leave blank for 85% auto)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+
+            // Head-Wise Bifurcation Live Summary Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = LightBlueBg),
+                elevation = CardDefaults.cardElevation(3.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "HEAD-WISE BIFURCATION",
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy,
+                            fontSize = 14.sp
+                        )
+                        Surface(
+                            color = PrimaryNavy,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "Age: $age | Mult: ${result.multiplier}",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+
+                    result.heads.forEachIndexed { idx, head ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${idx + 1}. ${head.headName}",
+                                fontSize = 13.sp,
+                                color = Color(0xFF1C2833),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = formatInr(head.amount),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1C2833)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("NET PRINCIPAL AWARD:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PrimaryNavy)
+                        Text(formatInr(result.netAwardAmount), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryNavy)
+                    }
+
+                    if (includeInterestInExport) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Interest (${interestRate}% from $petitionDateLabel • $days days):",
+                                fontSize = 12.sp,
+                                color = AccentGreen
+                            )
+                            Text(
+                                text = "+ ${formatInr(result.interestAmount)}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AccentGreen
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("TOTAL PAYABLE TODAY:", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = AccentRed)
+                            Text(formatInr(result.totalPayableWithInterest), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = AccentRed)
+                        }
+                    }
+
+                    if (includeLokAdalatInExport) {
+                        HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+                        Text(
+                            text = "LOK ADALAT COMPROMISE ANALYSIS (NO SEPARATE INTEREST)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = AccentPurple
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "• Consolidated Lump Sum Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%):",
+                                fontSize = 13.sp,
+                                color = AccentPurple
+                            )
+                            Text(
+                                text = formatInr(result.compromiseOfferAmount),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = AccentPurple
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("• Max NPV Settlement Ceiling:", fontSize = 13.sp, color = AccentPurple)
+                            Text(formatInr(result.npvMaxCompromiseCeiling), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentPurple)
+                        }
+                    }
+                }
+            }
+
+            // 3. Export & Share Controls Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "3. EXPORT & SHARE CONTROLS",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 13.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Include Interest Projection", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Turn off to export Principal Award or Lok Adalat only", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = includeInterestInExport,
+                            onCheckedChange = { includeInterestInExport = it }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Include Lok Adalat Compromise Section", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Lump-sum compromise without interest breakdown", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = includeLokAdalatInExport,
+                            onCheckedChange = { includeLokAdalatInExport = it }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val text = formatExportText(
+                                    mcopNumber, claimantName, age, petitionDateLabel, days,
+                                    interestRate, selectedMode, result,
+                                    includeInterestInExport, includeLokAdalatInExport
+                                )
+                                shareText(context, text)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("WhatsApp", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                exportPdfMemo(
+                                    context, mcopNumber, claimantName, age, petitionDateLabel, days,
+                                    interestRate, selectedMode, result,
+                                    includeInterestInExport, includeLokAdalatInExport
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryBlue),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("PDF Memo", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                exportCsvForSheets(
+                                    context, mcopNumber, claimantName, age, selectedMode,
+                                    result, includeInterestInExport
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("CSV", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Saved Cases Search & Load Modal Dialog
+    if (showSavedCasesDialog) {
+        val filteredList = remember(savedCasesList, searchQuery) {
+            if (searchQuery.isBlank()) {
+                savedCasesList
+            } else {
+                val q = searchQuery.trim().lowercase()
+                savedCasesList.filter {
+                    it.mcopNumber.lowercase().contains(q) ||
+                        it.claimantName.lowercase().contains(q) ||
+                        it.claimModeName.lowercase().contains(q)
+                }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSavedCasesDialog = false },
+            title = {
+                Column {
+                    Text("Saved MCOP Cases Vault", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = PrimaryNavy)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search MCOP No. or Claimant Name...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            text = {
+                if (filteredList.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No matching saved cases found.", color = Color.Gray, fontSize = 13.sp)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filteredList) { item ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = LightBlueBg),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        mcopNumber = item.mcopNumber
+                                        claimantName = item.claimantName
+                                        selectedMode = runCatching { ClaimMode.valueOf(item.claimModeName) }.getOrDefault(ClaimMode.PARTIAL)
+                                        ageStr = item.ageStr
+                                        monthlyIncomeStr = item.monthlyIncomeStr
+                                        disabilityStr = item.disabilityStr
+                                        ratePerPctStr = item.ratePerPctStr
+                                        dependentsStr = item.dependentsStr
+                                        pranaySethiSteps = item.pranaySethiSteps
+                                        tempInjuryCompStr = item.tempInjuryCompStr
+                                        lossOfIncomeMonthsStr = item.lossOfIncomeMonthsStr
+                                        medicalStr = item.medicalStr
+                                        futureMedicalStr = item.futureMedicalStr
+                                        painSufferingStr = item.painSufferingStr
+                                        transportStr = item.transportStr
+                                        nourishmentStr = item.nourishmentStr
+                                        attendantStr = item.attendantStr
+                                        clothingDamageStr = item.clothingDamageStr
+                                        amenitiesStr = item.amenitiesStr
+                                        prospectsStr = item.prospectsStr
+                                        interestRateStr = item.interestRateStr
+                                        petitionDateLabel = item.petitionDateLabel
+                                        daysStr = item.daysStr
+                                        customOfferStr = item.customOfferStr
+                                        showSavedCasesDialog = false
+                                        Toast.makeText(context, "Loaded MCOP ${item.mcopNumber}", Toast.LENGTH_SHORT).show()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "MCOP ${item.mcopNumber} • ${item.claimantName}",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = PrimaryNavy
+                                        )
+                                        Text(
+                                            text = "${item.claimModeName} | Net Award: ${formatInr(item.netAwardPreview.toDouble())}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AccentGreen
+                                        )
+                                        Text(
+                                            text = "Saved: ${item.savedAt}",
+                                            fontSize = 10.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        savedCasesList = deleteCaseFromPrefs(context, item.id)
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AccentRed)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSavedCasesDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+}
+
+private const val PREFS_NAME = "mcop_saved_cases_prefs"
+private const val KEY_CASES_JSON = "saved_cases_json"
+
+fun saveCaseToPrefs(context: Context, newCase: SavedMcopCase): List<SavedMcopCase> {
+    val existing = loadAllSavedCases(context).toMutableList()
+    val index = existing.indexOfFirst { it.id.equals(newCase.id, ignoreCase = true) }
+    if (index >= 0) {
+        existing[index] = newCase
+    } else {
+        existing.add(0, newCase)
+    }
+    persistCasesList(context, existing)
+    return existing
+}
+
+fun deleteCaseFromPrefs(context: Context, id: String): List<SavedMcopCase> {
+    val existing = loadAllSavedCases(context).filterNot { it.id.equals(id, ignoreCase = true) }
+    persistCasesList(context, existing)
+    return existing
+}
+
+private fun persistCasesList(context: Context, list: List<SavedMcopCase>) {
+    val arr = JSONArray()
+    list.forEach { item ->
+        val obj = JSONObject().apply {
+            put("id", item.id)
+            put("mcopNumber", item.mcopNumber)
+            put("claimantName", item.claimantName)
+            put("claimModeName", item.claimModeName)
+            put("ageStr", item.ageStr)
+            put("monthlyIncomeStr", item.monthlyIncomeStr)
+            put("disabilityStr", item.disabilityStr)
+            put("ratePerPctStr", item.ratePerPctStr)
+            put("dependentsStr", item.dependentsStr)
+            put("pranaySethiSteps", item.pranaySethiSteps)
+            put("tempInjuryCompStr", item.tempInjuryCompStr)
+            put("lossOfIncomeMonthsStr", item.lossOfIncomeMonthsStr)
+            put("medicalStr", item.medicalStr)
+            put("futureMedicalStr", item.futureMedicalStr)
+            put("painSufferingStr", item.painSufferingStr)
+            put("transportStr", item.transportStr)
+            put("nourishmentStr", item.nourishmentStr)
+            put("attendantStr", item.attendantStr)
+            put("clothingDamageStr", item.clothingDamageStr)
+            put("amenitiesStr", item.amenitiesStr)
+            put("prospectsStr", item.prospectsStr)
+            put("interestRateStr", item.interestRateStr)
+            put("petitionDateLabel", item.petitionDateLabel)
+            put("daysStr", item.daysStr)
+            put("customOfferStr", item.customOfferStr)
+            put("savedAt", item.savedAt)
+            put("netAwardPreview", item.netAwardPreview)
+        }
+        arr.put(obj)
+    }
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KEY_CASES_JSON, arr.toString())
+        .apply()
+}
+
+fun loadAllSavedCases(context: Context): List<SavedMcopCase> {
+    val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString(KEY_CASES_JSON, null) ?: return emptyList()
+    return try {
+        val arr = JSONArray(raw)
+        val list = mutableListOf<SavedMcopCase>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            list.add(
+                SavedMcopCase(
+                    id = obj.optString("id"),
+                    mcopNumber = obj.optString("mcopNumber"),
+                    claimantName = obj.optString("claimantName"),
+                    claimModeName = obj.optString("claimModeName", ClaimMode.PARTIAL.name),
+                    ageStr = obj.optString("ageStr", "34"),
+                    monthlyIncomeStr = obj.optString("monthlyIncomeStr", "15000"),
+                    disabilityStr = obj.optString("disabilityStr", "20"),
+                    ratePerPctStr = obj.optString("ratePerPctStr", "7000"),
+                    dependentsStr = obj.optString("dependentsStr", "3"),
+                    pranaySethiSteps = obj.optInt("pranaySethiSteps", 2),
+                    tempInjuryCompStr = obj.optString("tempInjuryCompStr", "35000"),
+                    lossOfIncomeMonthsStr = obj.optString("lossOfIncomeMonthsStr", "3"),
+                    medicalStr = obj.optString("medicalStr", "25000"),
+                    futureMedicalStr = obj.optString("futureMedicalStr", "0"),
+                    painSufferingStr = obj.optString("painSufferingStr", "40000"),
+                    transportStr = obj.optString("transportStr", "10000"),
+                    nourishmentStr = obj.optString("nourishmentStr", "15000"),
+                    attendantStr = obj.optString("attendantStr", "15000"),
+                    clothingDamageStr = obj.optString("clothingDamageStr", "3000"),
+                    amenitiesStr = obj.optString("amenitiesStr", "25000"),
+                    prospectsStr = obj.optString("prospectsStr", "40"),
+                    interestRateStr = obj.optString("interestRateStr", "7.5"),
+                    petitionDateLabel = obj.optString("petitionDateLabel", "09-05-2024"),
+                    daysStr = obj.optString("daysStr", "914"),
+                    customOfferStr = obj.optString("customOfferStr", ""),
+                    savedAt = obj.optString("savedAt", ""),
+                    netAwardPreview = obj.optLong("netAwardPreview", 0L)
+                )
+            )
+        }
+        list
+    } catch (e: Exception) {
+        emptyList()
+    }
+}
+
+fun formatExportText(
+    mcopNo: String,
+    name: String,
+    age: Int,
+    petitionDate: String,
+    days: Long,
+    interestRate: Double,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean,
+    includeLokAdalat: Boolean
+): String {
+    val sb = StringBuilder()
+    sb.append("*MCOP CALCULATION & COMPROMISE MEMO (${mode.shortLabel.uppercase()})*\n")
+    sb.append("----------------------------------------\n")
+    sb.append("MCOP No: *$mcopNo*\n")
+    sb.append("Claimant: *$name*\n")
+    sb.append("Age / Multiplier: $age Yrs (Mult: ${result.multiplier})\n")
+    sb.append("Net Annual Income: ${formatInr(result.netAnnualIncome)}\n\n")
+
+    sb.append("*HEAD-WISE BIFURCATION:*\n")
+    result.heads.forEachIndexed { index, head ->
+        sb.append("${index + 1}. ${head.headName}: *${formatInr(head.amount)}*\n")
+    }
+    sb.append("----------------------------------------\n")
+    sb.append("*NET PRINCIPAL AWARD: ${formatInr(result.netAwardAmount)}*\n")
+
+    if (includeInterest) {
+        sb.append("Interest (${interestRate}% from $petitionDate - $days days): +${formatInr(result.interestAmount)}\n")
+        sb.append("*TOTAL PAYABLE TODAY: ${formatInr(result.totalPayableWithInterest)}*\n")
+    }
+
+    if (includeLokAdalat) {
+        sb.append("========================================\n")
+        sb.append("*LOK ADALAT COMPROMISE (CONSOLIDATED)*\n")
+        sb.append("• Proposed Consolidated Offer: *${formatInr(result.compromiseOfferAmount)}* (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%)\n")
+        sb.append("• Max NPV Ceiling: *${formatInr(result.npvMaxCompromiseCeiling)}*\n")
+        sb.append("_(Full & final consolidated settlement without separate interest)_")
+    }
+
+    return sb.toString()
+}
+
+fun shareText(context: Context, text: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share MCOP Memo"))
+}
+
+fun exportPdfMemo(
+    context: Context,
+    mcopNo: String,
+    name: String,
+    age: Int,
+    petitionDate: String,
+    days: Long,
+    interestRate: Double,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean,
+    includeLokAdalat: Boolean
+) {
+    try {
+        val pdfDocument = PdfDocument()
+        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val page = pdfDocument.startPage(pageInfo)
+        val canvas: Canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 13f
+            color = android.graphics.Color.rgb(27, 79, 114)
+            textAlign = Paint.Align.CENTER
+        }
+        val subHeaderPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 11f
+            color = android.graphics.Color.BLACK
+        }
+        val bodyPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 10f
+            color = android.graphics.Color.DKGRAY
+        }
+        val amountBoldPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 10f
+            color = android.graphics.Color.BLACK
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = android.graphics.Color.LTGRAY
+            strokeWidth = 1f
+        }
+
+        var y = 42f
+        canvas.drawText("BEFORE THE MOTOR ACCIDENTS CLAIMS TRIBUNAL / LOK ADALAT", 297.5f, y, titlePaint)
+        y += 18f
+        canvas.drawText("CALCULATION & BIFURCATION MEMO IN M.C.O.P. No. $mcopNo", 297.5f, y, titlePaint)
+        y += 14f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        y += 20f
+        canvas.drawText("Claimant Name: $name", 45f, y, subHeaderPaint)
+        canvas.drawText("Category: ${mode.label}", 310f, y, bodyPaint)
+        y += 16f
+        canvas.drawText("Age / Multiplier: $age Yrs (Multiplier: ${result.multiplier})", 45f, y, bodyPaint)
+        canvas.drawText("Annual Income: ${formatInr(result.netAnnualIncome)}", 310f, y, bodyPaint)
+        y += 14f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        y += 20f
+        canvas.drawText("S.No.", 45f, y, subHeaderPaint)
+        canvas.drawText("HEAD OF COMPENSATION", 90f, y, subHeaderPaint)
+        canvas.drawText("AMOUNT (INR)", 545f, y, amountBoldPaint)
+        y += 10f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        result.heads.forEachIndexed { index, head ->
+            y += 18f
+            canvas.drawText("${index + 1}.", 45f, y, bodyPaint)
+            canvas.drawText(head.headName, 90f, y, bodyPaint)
+            canvas.drawText(formatInr(head.amount), 545f, y, amountBoldPaint)
+        }
+
+        y += 12f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        y += 20f
+        canvas.drawText("NET PRINCIPAL AWARD AMOUNT", 45f, y, subHeaderPaint)
+        canvas.drawText(formatInr(result.netAwardAmount), 545f, y, amountBoldPaint)
+
+        if (includeInterest) {
+            y += 18f
+            canvas.drawText("Interest @ ${interestRate}% p.a. (from $petitionDate for $days days)", 45f, y, bodyPaint)
+            canvas.drawText("+ ${formatInr(result.interestAmount)}", 545f, y, amountBoldPaint)
+
+            y += 12f
+            canvas.drawLine(45f, y, 550f, y, linePaint)
+            y += 20f
+            canvas.drawText("TOTAL PAYABLE TODAY (WITH INTEREST)", 45f, y, subHeaderPaint)
+            canvas.drawText(formatInr(result.totalPayableWithInterest), 545f, y, amountBoldPaint)
+        }
+
+        if (includeLokAdalat) {
+            y += 24f
+            canvas.drawLine(45f, y, 550f, y, linePaint)
+            y += 20f
+            canvas.drawText("LOK ADALAT COMPROMISE PROPOSAL (WITHOUT SEPARATE INTEREST)", 45f, y, subHeaderPaint)
+            y += 18f
+            canvas.drawText(
+                "• Proposed Consolidated Settlement Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%)",
+                55f,
+                y,
+                bodyPaint
+            )
+            canvas.drawText(formatInr(result.compromiseOfferAmount), 545f, y, amountBoldPaint)
+
+            y += 16f
+            canvas.drawText("• Maximum Actuarial NPV Ceiling", 55f, y, bodyPaint)
+            canvas.drawText(formatInr(result.npvMaxCompromiseCeiling), 545f, y, amountBoldPaint)
+        }
+
+        y = 795f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+        y += 15f
+        canvas.drawText("Generated via MCOP Compensation Calculator", 45f, y, bodyPaint)
+
+        pdfDocument.finishPage(page)
+
+        val safeNo = mcopNo.replace("/", "_").replace(" ", "_")
+        val file = File(context.cacheDir, "MCOP_Memo_$safeNo.pdf")
+        FileOutputStream(file).use { pdfDocument.writeTo(it) }
+        pdfDocument.close()
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share PDF Calculation Memo"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "PDF Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun exportCsvForSheets(
+    context: Context,
+    mcopNo: String,
+    name: String,
+    age: Int,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean
+) {
+    try {
+        val headsSummary = result.heads.joinToString(" | ") { "${it.headName}: ${it.amount.roundToLong()}" }
+        val csvHeader = "MCOP_No,Claimant,Age,Mode,Net_Annual_Income,Multiplier,Head_Wise_Breakdown,Net_Principal_Award,Interest_Amount,Total_Payable,Lok_Adalat_Offer,NPV_Ceiling\n"
+        val interestVal = if (includeInterest) result.interestAmount.roundToLong() else 0L
+        val totalVal = if (includeInterest) result.totalPayableWithInterest.roundToLong() else result.netAwardAmount.roundToLong()
+        val csvRow = listOf(
+            mcopNo,
+            name.replace(",", " "),
+            age.toString(),
+            mode.shortLabel,
+            result.netAnnualIncome.roundToLong().toString(),
+            result.multiplier.toString(),
+            "\"$headsSummary\"",
+            result.netAwardAmount.roundToLong().toString(),
+            interestVal.toString(),
+            totalVal.toString(),
+            result.compromiseOfferAmount.roundToLong().toString(),
+            result.npvMaxCompromiseCeiling.roundToLong().toString()
+        ).joinToString(",") + "\n"
+
+        val safeNo = mcopNo.replace("/", "_").replace(" ", "_")
+        val file = File(context.cacheDir, "MCOP_$safeNo.csv")
+        FileOutputStream(file).use { it.write((csvHeader + csvRow).toByteArray()) }
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Export CSV for Google Sheets"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "CSV Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}

@@ -1,9 +1,9 @@
 package com.kamarajlawoffice.mcopcalculator
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -11,166 +11,184 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
+import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.text.NumberFormat
-import java.time.Instant
-import java.time.LocalDate
-import java.time.Period
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
-import java.util.Locale
-import kotlin.math.max
-import kotlin.math.pow
+import java.util.*
 import kotlin.math.roundToLong
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Color(0xFF1B4F72),
-                    secondary = Color(0xFF2874A6),
-                    tertiary = Color(0xFF117864),
-                    surfaceVariant = Color(0xFFEBF5FB)
-                )
-            ) {
-                McopCalculatorScreen()
-            }
-        }
-    }
+enum class ClaimMode(val label: String, val shortLabel: String) {
+    FATAL("Fatal Accident", "Fatal"),
+    PERMANENT("Permanent Disability (Multiplier)", "Perm %"),
+    PARTIAL("Partial Disability (Per % Point)", "Partial %"),
+    TEMPORARY("Simple / Temporary Injury", "Temp")
 }
 
-enum class AppTab(val title: String) {
-    CALCULATION_SHEET("1. MCOP Sheet"),
-    LOK_ADALAT_COMPROMISE("2. Lok Adalat Compromise")
-}
-
-enum class ClaimMode(val label: String) {
-    TEMPORARY("Temp"),
-    PARTIAL_PERCENT("Partial %"),
-    PERMANENT_MULTIPLIER("Permanent"),
-    FATAL_DEATH("Fatal")
-}
-
-enum class OccupationType(val label: String) {
-    SELF_EMPLOYED("Self-Employed / Fixed"),
-    SALARIED("Salaried (Permanent)")
-}
-
-enum class MaritalDeductionCategory(val label: String) {
-    MARRIED_FAMILY("Married / Family"),
-    BACHELOR_HALF("Bachelor (1/2 Ded.)"),
-    BACHELOR_ONE_THIRD("Bachelor (1/3 Ded.)")
-}
-
-data class McopInputState(
-    val mcopNumber: String = "412/2025",
-    val claimantName: String = "",
-    val age: String = "34",
-    val monthlyIncome: String = "15000",
-    val annualIncomeTax: String = "0",
-    val occupationType: OccupationType = OccupationType.SELF_EMPLOYED,
-    val claimMode: ClaimMode = ClaimMode.FATAL_DEATH,
-    val maritalCategory: MaritalDeductionCategory = MaritalDeductionCategory.MARRIED_FAMILY,
-    val numberOfDependents: String = "3",
-    val consortiumDependentsCount: String = "3",
-    val consortiumRatePerHead: String = "48000",
-    val lossOfEstate: String = "18000",
-    val funeralExpenses: String = "18000",
-    val medicalBoardPercentage: String = "40",
-    val ratePerPercentage: String = "5000",
-    val functionalDisabilityPercentage: String = "40",
-    val includeFutureProspects: Boolean = true,
-    val treatmentRestMonths: String = "4",
-    val medicalBills: String = "0",
-    val painAndSuffering: String = "50000",
-    val transportAndNourishment: String = "15000",
-    val attenderCharges: String = "10000",
-    val lossOfAmenities: String = "40000",
-    val damageToClothing: String = "2000",
-    val futureMedicalExpenses: String = "0",
-    val lossOfMarriageProspects: String = "0",
-    val contributoryNegligencePercent: String = "0",
-    val negligenceNote: String = "No Helmet / Contributory",
-    val petitionDate: LocalDate = LocalDate.now().minusYears(2).minusMonths(6),
-    val calculationDate: LocalDate = LocalDate.now(),
-    val excludedDelayDays: String = "0",
-    val interestRatePercent: String = "7.5",
-    val excludeFutureMedicalFromInterest: Boolean = true,
-    val compromiseOfferInput: String = "2200000",
-    val expectedTrialYears: String = "5.0",
-    val trialAssessmentHaircutPercent: String = "10",
-    val discountOrFdRatePercent: String = "7.0",
-    val futureLitigationCost: String = "35000"
+data class HeadBifurcation(
+    val headName: String,
+    val amount: Double
 )
 
 data class McopCalculationResult(
     val netAnnualIncome: Double,
     val multiplier: Int,
-    val futureProspectsPercent: Double,
-    val annualIncomeWithFutureProspects: Double,
-    val deductionFractionLabel: String,
-    val personalLivingDeductionAmount: Double,
-    val annualMultiplicand: Double,
-    val lossOfDependencyTotal: Double,
-    val totalConsortiumAmount: Double,
-    val totalConventionalHeads: Double,
-    val disabilityOrFutureEarningLoss: Double,
-    val lossOfIncomeDuringTreatment: Double,
-    val grossCompensation: Double,
-    val negligenceDeductionAmount: Double,
     val netAwardAmount: Double,
-    val totalInterestDays: Long,
-    val formattedDuration: String,
-    val interestBearingPrincipal: Double,
     val interestAmount: Double,
     val totalPayableWithInterest: Double,
     val compromiseOfferAmount: Double,
-    val immediateDiscountSaved: Double,
-    val settlementRatioToTodayTotalPercent: Double,
-    val settlementRatioToPrincipalPercent: Double,
-    val contestedPrincipalAfterHaircut: Double,
-    val totalContestedInterestDays: Long,
-    val projectedContestedInterestAmount: Double,
-    val projectedContestedTotalOutflow: Double,
+    val compromisePercentageOfTotal: Double,
     val npvMaxCompromiseCeiling: Double,
-    val npvNetSavingsVsContested: Double,
-    val nominalFutureSavings: Double,
-    val claimantOfferFutureFdValue: Double,
-    val claimantFdAdvantageVsTrial: Double,
-    val isOfferFavorableForSettlement: Boolean
+    val heads: List<HeadBifurcation>
 )
 
-object McopJudicialEngine {
-    fun getSarlaVermaMultiplier(age: Int): Int = when {
-        age <= 15 -> 15
-        age in 16..25 -> 18
+val PrimaryNavy = Color(0xFF1B4F72)
+val SecondaryBlue = Color(0xFF2874A6)
+val LightBlueBg = Color(0xFFEBF5FB)
+val SurfaceBg = Color(0xFFF4F6F7)
+val AccentGreen = Color(0xFF1E8449)
+val AccentPurple = Color(0xFF6C3483)
+val AccentRed = Color(0xFFB03A2E)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as Activity).window
+                    window.statusBarColor = PrimaryNavy.toArgb()
+                    window.navigationBarColor = PrimaryNavy.toArgb()
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+                }
+            }
+
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = PrimaryNavy,
+                    onPrimary = Color.White,
+                    primaryContainer = LightBlueBg,
+                    onPrimaryContainer = PrimaryNavy,
+                    secondary = SecondaryBlue,
+                    background = SurfaceBg,
+                    surface = Color.White
+                )
+            ) {
+                var showSplash by remember { mutableStateOf(true) }
+
+                LaunchedEffect(Unit) {
+                    delay(1400)
+                    showSplash = false
+                }
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (!showSplash) {
+                        McopCalculatorApp()
+                    }
+                    AnimatedVisibility(
+                        visible = showSplash,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        SplashScreen()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SplashScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PrimaryNavy),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Gavel,
+                    contentDescription = "App Logo",
+                    tint = Color.White,
+                    modifier = Modifier.size(54.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "MCOP Compensation\nCalculator",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                lineHeight = 30.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Kamaraj Law Office • Tirunelveli",
+                color = Color(0xFFD4E6F1),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            CircularProgressIndicator(
+                color = Color.White,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
+fun formatInr(amount: Double): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    formatter.maximumFractionDigits = 0
+    return formatter.format(amount.roundToLong())
+}
+
+fun getMultiplier(age: Int): Int {
+    return when {
+        age <= 25 -> 18
         age in 26..30 -> 17
         age in 31..35 -> 16
         age in 36..40 -> 15
@@ -181,757 +199,965 @@ object McopJudicialEngine {
         age in 61..65 -> 7
         else -> 5
     }
-
-    fun getFutureProspectsPercentage(age: Int, occupation: OccupationType): Double = when (occupation) {
-        OccupationType.SALARIED -> when {
-            age < 40 -> 50.0
-            age in 40..50 -> 30.0
-            age in 51..60 -> 15.0
-            else -> 0.0
-        }
-        OccupationType.SELF_EMPLOYED -> when {
-            age < 40 -> 40.0
-            age in 40..50 -> 25.0
-            age in 51..60 -> 10.0
-            else -> 0.0
-        }
-    }
-
-    fun getPersonalDeductionRatio(category: MaritalDeductionCategory, dependents: Int): Pair<Double, String> = when (category) {
-        MaritalDeductionCategory.BACHELOR_HALF -> Pair(0.50, "1/2 (50% - Bachelor)")
-        MaritalDeductionCategory.BACHELOR_ONE_THIRD -> Pair(1.0 / 3.0, "1/3 (Large Family Bachelor)")
-        MaritalDeductionCategory.MARRIED_FAMILY -> when {
-            dependents <= 3 -> Pair(1.0 / 3.0, "1/3 (2 to 3 Dependents)")
-            dependents in 4..6 -> Pair(0.25, "1/4 (4 to 6 Dependents)")
-            else -> Pair(0.20, "1/5 (>6 Dependents)")
-        }
-    }
-
-    fun calculate(state: McopInputState): McopCalculationResult {
-        val age = state.age.toIntOrNull() ?: 30
-        val monthlyIncome = state.monthlyIncome.toDoubleOrNull() ?: 0.0
-        val annualTax = state.annualIncomeTax.toDoubleOrNull() ?: 0.0
-        val restMonths = state.treatmentRestMonths.toDoubleOrNull() ?: 0.0
-
-        val netAnnualIncome = max(0.0, (monthlyIncome * 12.0) - annualTax)
-        val multiplier = getSarlaVermaMultiplier(age)
-
-        val fpEnabled = state.claimMode == ClaimMode.FATAL_DEATH || state.includeFutureProspects
-        val fpPercent = if (fpEnabled) getFutureProspectsPercentage(age, state.occupationType) else 0.0
-
-        val annualWithFp = netAnnualIncome * (1.0 + (fpPercent / 100.0))
-
-        val dependentsCount = state.numberOfDependents.toIntOrNull() ?: 3
-        val (deductionRatio, deductionLabel) = getPersonalDeductionRatio(state.maritalCategory, dependentsCount)
-        val personalDeductionAmt = if (state.claimMode == ClaimMode.FATAL_DEATH) annualWithFp * deductionRatio else 0.0
-        val annualMultiplicand = annualWithFp - personalDeductionAmt
-        val lossOfDependency = if (state.claimMode == ClaimMode.FATAL_DEATH) annualMultiplicand * multiplier else 0.0
-
-        val consortiumHeads = state.consortiumDependentsCount.toIntOrNull() ?: 0
-        val consortiumRate = state.consortiumRatePerHead.toDoubleOrNull() ?: 40000.0
-        val totalConsortium = if (state.claimMode == ClaimMode.FATAL_DEATH) consortiumHeads * consortiumRate else 0.0
-
-        val estate = if (state.claimMode == ClaimMode.FATAL_DEATH) (state.lossOfEstate.toDoubleOrNull() ?: 0.0) else 0.0
-        val funeral = if (state.claimMode == ClaimMode.FATAL_DEATH) (state.funeralExpenses.toDoubleOrNull() ?: 0.0) else 0.0
-        val totalConventional = totalConsortium + estate + funeral
-
-        val lossDuringTreatment = if (state.claimMode == ClaimMode.FATAL_DEATH) 0.0 else (monthlyIncome * restMonths)
-        val disabilityLoss = when (state.claimMode) {
-            ClaimMode.TEMPORARY, ClaimMode.FATAL_DEATH -> 0.0
-            ClaimMode.PARTIAL_PERCENT -> {
-                val medPct = state.medicalBoardPercentage.toDoubleOrNull() ?: 0.0
-                val rate = state.ratePerPercentage.toDoubleOrNull() ?: 0.0
-                medPct * rate
-            }
-            ClaimMode.PERMANENT_MULTIPLIER -> {
-                val funcPct = state.functionalDisabilityPercentage.toDoubleOrNull() ?: 0.0
-                annualWithFp * (funcPct / 100.0) * multiplier
-            }
-        }
-
-        val medical = state.medicalBills.toDoubleOrNull() ?: 0.0
-        val transport = state.transportAndNourishment.toDoubleOrNull() ?: 0.0
-        val clothing = state.damageToClothing.toDoubleOrNull() ?: 0.0
-        val pain = if (state.claimMode == ClaimMode.FATAL_DEATH) 0.0 else (state.painAndSuffering.toDoubleOrNull() ?: 0.0)
-        val attender = if (state.claimMode == ClaimMode.FATAL_DEATH) 0.0 else (state.attenderCharges.toDoubleOrNull() ?: 0.0)
-        val amenities = if (state.claimMode == ClaimMode.PARTIAL_PERCENT || state.claimMode == ClaimMode.PERMANENT_MULTIPLIER) state.lossOfAmenities.toDoubleOrNull() ?: 0.0 else 0.0
-        val futureMed = if (state.claimMode == ClaimMode.PERMANENT_MULTIPLIER) state.futureMedicalExpenses.toDoubleOrNull() ?: 0.0 else 0.0
-        val marriage = if (state.claimMode == ClaimMode.PERMANENT_MULTIPLIER) state.lossOfMarriageProspects.toDoubleOrNull() ?: 0.0 else 0.0
-
-        val gross = if (state.claimMode == ClaimMode.FATAL_DEATH) {
-            lossOfDependency + totalConventional + medical + transport + clothing
-        } else {
-            disabilityLoss + lossDuringTreatment + medical + pain + transport + attender + amenities + clothing + futureMed + marriage
-        }
-
-        val negPct = (state.contributoryNegligencePercent.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0)
-        val negDeduction = gross * (negPct / 100.0)
-        val netAward = gross - negDeduction
-
-        val rawDays = ChronoUnit.DAYS.between(state.petitionDate, state.calculationDate)
-        val excludedDays = state.excludedDelayDays.toLongOrNull() ?: 0L
-        val netInterestDays = max(0L, rawDays - excludedDays)
-
-        val period = if (!state.calculationDate.isBefore(state.petitionDate)) Period.between(state.petitionDate, state.calculationDate) else Period.ZERO
-        val durationStr = "${period.years} Yrs, ${period.months} Mos, ${period.days} Days"
-
-        val effectiveFutureMedInNet = futureMed * (1.0 - (negPct / 100.0))
-        val interestPrincipal = if (state.claimMode == ClaimMode.PERMANENT_MULTIPLIER && state.excludeFutureMedicalFromInterest) max(0.0, netAward - effectiveFutureMedInNet) else netAward
-
-        val interestRate = state.interestRatePercent.toDoubleOrNull() ?: 7.5
-        val interestAmount = interestPrincipal * (interestRate / 100.0) * (netInterestDays / 365.0)
-        val totalPayableToday = netAward + interestAmount
-
-        val offerAmount = state.compromiseOfferInput.toDoubleOrNull() ?: 0.0
-        val immediateSaved = totalPayableToday - offerAmount
-        val ratioToTodayTotal = if (totalPayableToday > 0.0) (offerAmount / totalPayableToday) * 100.0 else 0.0
-        val ratioToPrincipal = if (netAward > 0.0) (offerAmount / netAward) * 100.0 else 0.0
-
-        val trialYears = (state.expectedTrialYears.toDoubleOrNull() ?: 5.0).coerceAtLeast(0.0)
-        val haircutPct = (state.trialAssessmentHaircutPercent.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0)
-        val discountRate = (state.discountOrFdRatePercent.toDoubleOrNull() ?: 7.0).coerceAtLeast(0.0)
-        val legalCosts = state.futureLitigationCost.toDoubleOrNull() ?: 0.0
-
-        val haircutMultiplier = 1.0 - (haircutPct / 100.0)
-        val contestedPrincipal = netAward * haircutMultiplier
-        val contestedInterestPrincipal = interestPrincipal * haircutMultiplier
-
-        val futureTrialDays = (trialYears * 365.0).roundToLong()
-        val totalContestedDays = netInterestDays + futureTrialDays
-        val projectedContestedInterest = contestedInterestPrincipal * (interestRate / 100.0) * (totalContestedDays / 365.0)
-        val projectedContestedTotalOutflow = contestedPrincipal + projectedContestedInterest + legalCosts
-
-        val compoundFactor = (1.0 + (discountRate / 100.0)).pow(trialYears)
-        val npvMaxCeiling = if (compoundFactor > 0.0) projectedContestedTotalOutflow / compoundFactor else projectedContestedTotalOutflow
-        val npvNetSavings = npvMaxCeiling - offerAmount
-        val nominalFutureSavings = projectedContestedTotalOutflow - offerAmount
-        val claimantOfferFutureFdValue = offerAmount * compoundFactor
-        val claimantFdAdvantage = claimantOfferFutureFdValue - (contestedPrincipal + projectedContestedInterest)
-        val isFavorable = offerAmount <= npvMaxCeiling
-
-        return McopCalculationResult(
-            netAnnualIncome = netAnnualIncome,
-            multiplier = multiplier,
-            futureProspectsPercent = fpPercent,
-            annualIncomeWithFutureProspects = annualWithFp,
-            deductionFractionLabel = deductionLabel,
-            personalLivingDeductionAmount = personalDeductionAmt,
-            annualMultiplicand = annualMultiplicand,
-            lossOfDependencyTotal = lossOfDependency,
-            totalConsortiumAmount = totalConsortium,
-            totalConventionalHeads = totalConventional,
-            disabilityOrFutureEarningLoss = disabilityLoss,
-            lossOfIncomeDuringTreatment = lossDuringTreatment,
-            grossCompensation = gross,
-            negligenceDeductionAmount = negDeduction,
-            netAwardAmount = netAward,
-            totalInterestDays = netInterestDays,
-            formattedDuration = durationStr,
-            interestBearingPrincipal = interestPrincipal,
-            interestAmount = interestAmount,
-            totalPayableWithInterest = totalPayableToday,
-            compromiseOfferAmount = offerAmount,
-            immediateDiscountSaved = immediateSaved,
-            settlementRatioToTodayTotalPercent = ratioToTodayTotal,
-            settlementRatioToPrincipalPercent = ratioToPrincipal,
-            contestedPrincipalAfterHaircut = contestedPrincipal,
-            totalContestedInterestDays = totalContestedDays,
-            projectedContestedInterestAmount = projectedContestedInterest,
-            projectedContestedTotalOutflow = projectedContestedTotalOutflow,
-            npvMaxCompromiseCeiling = npvMaxCeiling,
-            npvNetSavingsVsContested = npvNetSavings,
-            nominalFutureSavings = nominalFutureSavings,
-            claimantOfferFutureFdValue = claimantOfferFutureFdValue,
-            claimantFdAdvantageVsTrial = claimantFdAdvantage,
-            isOfferFavorableForSettlement = isFavorable
-        )
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun McopCalculatorScreen() {
-    val context = LocalContext.current
-    var state by remember { mutableStateOf(McopInputState()) }
-    var activeTab by remember { mutableStateOf(AppTab.CALCULATION_SHEET) }
-    val result = remember(state) { McopJudicialEngine.calculate(state) }
+fun calculateCompensation(
+    mode: ClaimMode,
+    monthlyIncome: Double,
+    age: Int,
+    disabilityPercent: Double,
+    ratePerPercentage: Double,
+    dependentsCount: Int,
+    medicalExpenses: Double,
+    painAndSuffering: Double,
+    attendantNourishment: Double,
+    lossOfAmenities: Double,
+    futureProspectsPercent: Double,
+    interestRatePercent: Double,
+    daysOfAccidentToNow: Long,
+    customCompromiseOffer: Double?
+): McopCalculationResult {
+    val annualIncome = monthlyIncome * 12.0
+    val multiplier = getMultiplier(age)
+    val prospectsFactor = 1.0 + (futureProspectsPercent / 100.0)
 
-    var showPetitionDatePicker by remember { mutableStateOf(false) }
-    var showCalcDatePicker by remember { mutableStateOf(false) }
-    var showExportSheet by remember { mutableStateOf(false) }
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd-MM-yyyy") }
+    val heads = mutableListOf<HeadBifurcation>()
 
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text("MCOP & Lok Adalat Calculator", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("Fatal • Disability • Actuarial Compromise Engine", fontSize = 11.sp, color = Color.White.copy(alpha = 0.85f))
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { state = McopInputState() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Color.White)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = Color.White
-                    )
-                )
-                TabRow(
-                    selectedTabIndex = activeTab.ordinal,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
-                ) {
-                    AppTab.entries.forEach { tab ->
-                        Tab(
-                            selected = activeTab == tab,
-                            onClick = { activeTab = tab },
-                            text = { Text(tab.title, fontWeight = if (activeTab == tab) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
-                        )
-                    }
-                }
+    when (mode) {
+        ClaimMode.FATAL -> {
+            val deductionFraction = when {
+                dependentsCount <= 1 -> 0.50
+                dependentsCount in 2..3 -> 1.0 / 3.0
+                dependentsCount in 4..6 -> 0.25
+                else -> 0.20
             }
-        },
-        bottomBar = {
-            Surface(
-                tonalElevation = 8.dp,
-                shadowElevation = 12.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (activeTab == AppTab.CALCULATION_SHEET) {
-                        Column {
-                            Text("Net Award: ${formatInr(result.netAwardAmount)}", fontSize = 12.sp, color = Color.Gray)
-                            Text("Total: ${formatInr(result.totalPayableWithInterest)}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
-                        }
-                    } else {
-                        Column {
-                            Text("Max NPV Ceiling: ${formatInr(result.npvMaxCompromiseCeiling)}", fontSize = 12.sp, color = Color.Gray)
-                            Text("Offer: ${formatInr(result.compromiseOfferAmount)} (${result.settlementRatioToTodayTotalPercent.roundToLong()}%)", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = if (result.isOfferFavorableForSettlement) Color(0xFF117864) else Color(0xFFB03A2E))
-                        }
-                    }
-                    Button(onClick = { showExportSheet = true }, shape = RoundedCornerShape(8.dp)) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Export Memo")
-                    }
-                }
+            val effectiveAnnualIncome = annualIncome * prospectsFactor * (1.0 - deductionFraction)
+            val lossOfDependency = effectiveAnnualIncome * multiplier
+            val consortiumTotal = (dependentsCount.coerceAtLeast(1)) * 40000.0
+
+            heads.add(HeadBifurcation("Loss of Dependency (Mult: $multiplier)", lossOfDependency))
+            heads.add(HeadBifurcation("Loss of Consortium ($dependentsCount Dep.)", consortiumTotal))
+            heads.add(HeadBifurcation("Loss of Estate", 15000.0))
+            heads.add(HeadBifurcation("Funeral Expenses", 15000.0))
+            if (medicalExpenses > 0) {
+                heads.add(HeadBifurcation("Medical Expenses (Pre-Death)", medicalExpenses))
             }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (activeTab == AppTab.CALCULATION_SHEET) {
-                McopSheetTabContent(
-                    state = state,
-                    result = result,
-                    dateFormatter = dateFormatter,
-                    onStateChange = { state = it },
-                    onShowPetitionPicker = { showPetitionDatePicker = true },
-                    onShowCalcPicker = { showCalcDatePicker = true },
-                    onJumpToCompromiseTab = {
-                        state = state.copy(compromiseOfferInput = (result.totalPayableWithInterest * 0.85).roundToLong().toString())
-                        activeTab = AppTab.LOK_ADALAT_COMPROMISE
-                    }
-                )
-            } else {
-                LokAdalatCompromiseTabContent(state = state, result = result, onStateChange = { state = it })
-            }
-            Spacer(Modifier.height(24.dp))
+        ClaimMode.PERMANENT -> {
+            val lossOfEarningCapacity = annualIncome * prospectsFactor * (disabilityPercent / 100.0) * multiplier
+            heads.add(HeadBifurcation("Loss of Earning Capacity (${disabilityPercent.toInt()}%)", lossOfEarningCapacity))
+            if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Treatment", medicalExpenses))
+            if (lossOfAmenities > 0) heads.add(HeadBifurcation("Loss of Amenities", lossOfAmenities))
+            if (attendantNourishment > 0) heads.add(HeadBifurcation("Attendant, Transport & Nourishment", attendantNourishment))
+        }
+        ClaimMode.PARTIAL -> {
+            val disabilityAward = disabilityPercent * ratePerPercentage
+            val lossDuringTreatment = monthlyIncome * 3.0
+            heads.add(HeadBifurcation("Permanent Disability (${disabilityPercent.toInt()}% × ₹${ratePerPercentage.toInt()})", disabilityAward))
+            heads.add(HeadBifurcation("Loss of Income During Treatment (3 Mos)", lossDuringTreatment))
+            if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Treatment", medicalExpenses))
+            if (lossOfAmenities > 0) heads.add(HeadBifurcation("Loss of Amenities", lossOfAmenities))
+            if (attendantNourishment > 0) heads.add(HeadBifurcation("Attendant, Transport & Nourishment", attendantNourishment))
+        }
+        ClaimMode.TEMPORARY -> {
+            val lossOfIncomeMonths = disabilityPercent.coerceIn(1.0, 24.0)
+            val actualLossOfEarnings = monthlyIncome * lossOfIncomeMonths
+            heads.add(HeadBifurcation("Loss of Income (${lossOfIncomeMonths.toInt()} Months)", actualLossOfEarnings))
+            if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Treatment", medicalExpenses))
+            if (attendantNourishment > 0) heads.add(HeadBifurcation("Transport & Extra Nourishment", attendantNourishment))
         }
     }
 
-    if (showPetitionDatePicker) {
-        McopDatePickerModal(initialDate = state.petitionDate, onDateSelected = { state = state.copy(petitionDate = it) }, onDismiss = { showPetitionDatePicker = false })
-    }
-    if (showCalcDatePicker) {
-        McopDatePickerModal(initialDate = state.calculationDate, onDateSelected = { state = state.copy(calculationDate = it) }, onDismiss = { showCalcDatePicker = false })
-    }
-    if (showExportSheet) {
-        ModalBottomSheet(onDismissRequest = { showExportSheet = false }) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Export & Share Calculation Memo", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text("MCOP No: ${state.mcopNumber} • Claim: ${formatInr(result.totalPayableWithInterest)} • Offer: ${formatInr(result.compromiseOfferAmount)}", fontSize = 12.5.sp, color = Color.Gray)
-                Button(onClick = { showExportSheet = false; McopExportManager.exportPdfCourtMemo(context, state, result) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Download & Share A4 PDF Memo (Includes Compromise)")
-                }
-                OutlinedButton(onClick = { showExportSheet = false; McopExportManager.exportCsvForSheets(context, state, result) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Export CSV Row (Excel / Google Sheets)")
-                }
-                OutlinedButton(onClick = { showExportSheet = false; McopExportManager.shareWhatsAppSummary(context, state, result) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Share Summary via WhatsApp / Text")
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-        }
-    }
-}
+    val netAward = heads.sumOf { it.amount }
+    val years = (daysOfAccidentToNow.coerceAtLeast(0L)) / 365.25
+    val interestAmount = netAward * (interestRatePercent / 100.0) * years
+    val totalPayable = netAward + interestAmount
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun McopSheetTabContent(
-    state: McopInputState,
-    result: McopCalculationResult,
-    dateFormatter: DateTimeFormatter,
-    onStateChange: (McopInputState) -> Unit,
-    onShowPetitionPicker: () -> Unit,
-    onShowCalcPicker: () -> Unit,
-    onJumpToCompromiseTab: () -> Unit
-) {
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        ClaimMode.entries.forEachIndexed { index, mode ->
-            SegmentedButton(
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = ClaimMode.entries.size),
-                onClick = { onStateChange(state.copy(claimMode = mode)) },
-                selected = state.claimMode == mode
-            ) {
-                Text(mode.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
+    val defaultCompromise = totalPayable * 0.85
+    val compromiseOffer = if (customCompromiseOffer != null && customCompromiseOffer > 0.0) {
+        customCompromiseOffer
+    } else {
+        defaultCompromise
     }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("1. CASE & INCOME PARAMETERS", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = state.mcopNumber, onValueChange = { onStateChange(state.copy(mcopNumber = it)) }, label = { Text("MCOP No.") }, modifier = Modifier.weight(1f), singleLine = true)
-                OutlinedTextField(value = state.claimantName, onValueChange = { onStateChange(state.copy(claimantName = it)) }, label = { Text(if (state.claimMode == ClaimMode.FATAL_DEATH) "Deceased Name" else "Claimant Name") }, modifier = Modifier.weight(1.3f), singleLine = true)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(value = state.age, onValueChange = { onStateChange(state.copy(age = it)) }, label = "Age (Yrs)", modifier = Modifier.weight(0.8f))
-                NumberField(value = state.monthlyIncome, onValueChange = { onStateChange(state.copy(monthlyIncome = it)) }, label = "Monthly Income (₹)", modifier = Modifier.weight(1.2f))
-                NumberField(value = state.annualIncomeTax, onValueChange = { onStateChange(state.copy(annualIncomeTax = it)) }, label = "Annual Tax (₹)", modifier = Modifier.weight(1f))
-            }
-            Text("Occupation Category (Pranay Sethi):", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OccupationType.entries.forEach { type ->
-                    FilterChip(selected = state.occupationType == type, onClick = { onStateChange(state.copy(occupationType = type)) }, label = { Text(type.label, fontSize = 11.sp) })
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(10.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("AUTO-DETECTED JUDICIAL PARAMETERS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("• Net Annual Income: ${formatInr(result.netAnnualIncome)} | Sarla Verma Multiplier: ${result.multiplier}", fontSize = 12.sp)
-                    Text("• Future Prospects (+${result.futureProspectsPercent.toInt()}%): ${formatInr(result.annualIncomeWithFutureProspects)} / yr", fontSize = 12.sp)
-                    if (state.claimMode == ClaimMode.FATAL_DEATH) {
-                        Text("• Personal Deduction (${result.deductionFractionLabel}): -${formatInr(result.personalLivingDeductionAmount)} / yr", fontSize = 12.sp)
-                        Text("• Annual Multiplicand: ${formatInr(result.annualMultiplicand)} × ${result.multiplier} = ${formatInr(result.lossOfDependencyTotal)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
+    val compromisePct = if (totalPayable > 0.0) (compromiseOffer / totalPayable) * 100.0 else 0.0
+    val npvCeiling = netAward + (interestAmount * 0.65)
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            when (state.claimMode) {
-                ClaimMode.FATAL_DEATH -> {
-                    Text("2. FATAL DEPENDENCY & PRANAY SETHI HEADS", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("Marital Status & Deduction Category (Sarla Verma):", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        MaritalDeductionCategory.entries.forEach { cat ->
-                            FilterChip(selected = state.maritalCategory == cat, onClick = { onStateChange(state.copy(maritalCategory = cat)) }, label = { Text(cat.label, fontSize = 11.sp) })
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (state.maritalCategory == MaritalDeductionCategory.MARRIED_FAMILY) {
-                            NumberField(value = state.numberOfDependents, onValueChange = { onStateChange(state.copy(numberOfDependents = it, consortiumDependentsCount = it)) }, label = "Total Dependents", modifier = Modifier.weight(1f))
-                        }
-                        NumberField(value = state.consortiumDependentsCount, onValueChange = { onStateChange(state.copy(consortiumDependentsCount = it)) }, label = "Consortium Claimants", modifier = Modifier.weight(1f))
-                        NumberField(value = state.consortiumRatePerHead, onValueChange = { onStateChange(state.copy(consortiumRatePerHead = it)) }, label = "Consortium / Head (₹)", modifier = Modifier.weight(1.2f))
-                    }
-                    Text("Pranay Sethi 3-Year Escalation Presets:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(Triple("Base (2017)", "40000", "15000"), Triple("+10% (2020)", "44000", "16500"), Triple("+20% (2023)", "48000", "18000"), Triple("+30% (2026)", "52000", "19500")).forEach { (label, consRate, estateFuneralRate) ->
-                            AssistChip(onClick = { onStateChange(state.copy(consortiumRatePerHead = consRate, lossOfEstate = estateFuneralRate, funeralExpenses = estateFuneralRate)) }, label = { Text(label, fontSize = 11.sp) })
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumberField(value = state.lossOfEstate, onValueChange = { onStateChange(state.copy(lossOfEstate = it)) }, label = "Loss of Estate (₹)", modifier = Modifier.weight(1f))
-                        NumberField(value = state.funeralExpenses, onValueChange = { onStateChange(state.copy(funeralExpenses = it)) }, label = "Funeral Expenses (₹)", modifier = Modifier.weight(1f))
-                    }
-                    HorizontalDivider()
-                    Text("Loss of Dependency: ${formatInr(result.lossOfDependencyTotal)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                    Text("Total Consortium (${state.consortiumDependentsCount} × ₹${state.consortiumRatePerHead}): ${formatInr(result.totalConsortiumAmount)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                }
-                ClaimMode.TEMPORARY -> {
-                    Text("2. TEMPORARY INJURY (NO PERMANENT DISABILITY)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    TreatmentIncomeLossRow(state, result, onStateChange)
-                }
-                ClaimMode.PARTIAL_PERCENT -> {
-                    Text("2. PARTIAL DISABILITY (PER-PERCENTAGE METHOD)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumberField(value = state.medicalBoardPercentage, onValueChange = { onStateChange(state.copy(medicalBoardPercentage = it)) }, label = "Med. Board %", modifier = Modifier.weight(1f))
-                        NumberField(value = state.ratePerPercentage, onValueChange = { onStateChange(state.copy(ratePerPercentage = it)) }, label = "Rate per % (₹)", modifier = Modifier.weight(1.3f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Quick Rate:", fontSize = 12.sp)
-                        listOf("4000", "5000", "7000", "9000").forEach { preset ->
-                            AssistChip(onClick = { onStateChange(state.copy(ratePerPercentage = preset)) }, label = { Text("₹$preset", fontSize = 11.sp) })
-                        }
-                    }
-                    Text("Disability Award (${state.medicalBoardPercentage}% × ₹${state.ratePerPercentage}): ${formatInr(result.disabilityOrFutureEarningLoss)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                    HorizontalDivider()
-                    TreatmentIncomeLossRow(state, result, onStateChange)
-                }
-                ClaimMode.PERMANENT_MULTIPLIER -> {
-                    Text("2. PERMANENT FUNCTIONAL DISABILITY (MULTIPLIER)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumberField(value = state.medicalBoardPercentage, onValueChange = { onStateChange(state.copy(medicalBoardPercentage = it)) }, label = "Medical %", modifier = Modifier.weight(1f))
-                        NumberField(value = state.functionalDisabilityPercentage, onValueChange = { onStateChange(state.copy(functionalDisabilityPercentage = it)) }, label = "Functional Loss %", modifier = Modifier.weight(1f))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = state.includeFutureProspects, onCheckedChange = { onStateChange(state.copy(includeFutureProspects = it)) })
-                        Text("Add Future Prospects (+${result.futureProspectsPercent.toInt()}%) - Pappu Deo Yadav", fontSize = 13.sp)
-                    }
-                    Text("Future Earning Loss (${formatInr(result.annualIncomeWithFutureProspects)} × ${state.functionalDisabilityPercentage}% × ${result.multiplier}): ${formatInr(result.disabilityOrFutureEarningLoss)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                    HorizontalDivider()
-                    TreatmentIncomeLossRow(state, result, onStateChange)
-                }
-            }
-        }
-    }
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(text = if (state.claimMode == ClaimMode.FATAL_DEATH) "3. PRE-DEATH MEDICAL & TRANSPORT HEADS (₹)" else "3. PECUNIARY & NON-PECUNIARY HEADS (₹)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            if (state.claimMode == ClaimMode.FATAL_DEATH) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(state.medicalBills, { onStateChange(state.copy(medicalBills = it)) }, "Pre-Death Medical Bills", Modifier.weight(1f))
-                    NumberField(state.transportAndNourishment, { onStateChange(state.copy(transportAndNourishment = it)) }, "Ambulance / Transport", Modifier.weight(1f))
-                }
-                NumberField(state.damageToClothing, { onStateChange(state.copy(damageToClothing = it)) }, "Damage to Clothing / Vehicle", Modifier.fillMaxWidth())
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(state.medicalBills, { onStateChange(state.copy(medicalBills = it)) }, "Medical Bills", Modifier.weight(1f))
-                    NumberField(state.painAndSuffering, { onStateChange(state.copy(painAndSuffering = it)) }, "Pain & Suffering", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(state.transportAndNourishment, { onStateChange(state.copy(transportAndNourishment = it)) }, "Transport & Nourish", Modifier.weight(1f))
-                    NumberField(state.attenderCharges, { onStateChange(state.copy(attenderCharges = it)) }, "Attender Charges", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.claimMode != ClaimMode.TEMPORARY) {
-                        NumberField(state.lossOfAmenities, { onStateChange(state.copy(lossOfAmenities = it)) }, "Loss of Amenities", Modifier.weight(1f))
-                    }
-                    NumberField(state.damageToClothing, { onStateChange(state.copy(damageToClothing = it)) }, "Damage to Clothing", Modifier.weight(1f))
-                }
-                if (state.claimMode == ClaimMode.PERMANENT_MULTIPLIER) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumberField(state.futureMedicalExpenses, { onStateChange(state.copy(futureMedicalExpenses = it)) }, "Future Medical / Limb", Modifier.weight(1f))
-                        NumberField(state.lossOfMarriageProspects, { onStateChange(state.copy(lossOfMarriageProspects = it)) }, "Marriage Prospects", Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("4. NEGLIGENCE & PETITION-DATE INTEREST", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(value = state.contributoryNegligencePercent, onValueChange = { onStateChange(state.copy(contributoryNegligencePercent = it)) }, label = "Negligence Deduction %", modifier = Modifier.weight(1f))
-                OutlinedTextField(value = state.negligenceNote, onValueChange = { onStateChange(state.copy(negligenceNote = it)) }, label = { Text("Deduction Reason") }, modifier = Modifier.weight(1.4f), singleLine = true)
-            }
-            HorizontalDivider()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = state.petitionDate.format(dateFormatter), onValueChange = {}, readOnly = true, label = { Text("Date of Petition") }, trailingIcon = { IconButton(onClick = onShowPetitionPicker) { Icon(Icons.Default.DateRange, contentDescription = "Select Petition Date") } }, modifier = Modifier.weight(1f).clickable { onShowPetitionPicker() })
-                OutlinedTextField(value = state.calculationDate.format(dateFormatter), onValueChange = {}, readOnly = true, label = { Text("Date of Calculation") }, trailingIcon = { IconButton(onClick = onShowCalcPicker) { Icon(Icons.Default.DateRange, contentDescription = "Select Calc Date") } }, modifier = Modifier.weight(1f).clickable { onShowCalcPicker() })
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(value = state.interestRatePercent, onValueChange = { onStateChange(state.copy(interestRatePercent = it)) }, label = "Interest Rate (% p.a.)", modifier = Modifier.weight(1f))
-                NumberField(value = state.excludedDelayDays, onValueChange = { onStateChange(state.copy(excludedDelayDays = it)) }, label = "Less Excluded Delay Days", modifier = Modifier.weight(1f))
-            }
-            if (state.claimMode == ClaimMode.PERMANENT_MULTIPLIER) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = state.excludeFutureMedicalFromInterest, onCheckedChange = { onStateChange(state.copy(excludeFutureMedicalFromInterest = it)) })
-                    Text("Exclude Future Medical Expenses from retroactive interest", fontSize = 12.sp)
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (state.claimMode == ClaimMode.FATAL_DEATH) {
-                        SummaryRow("Loss of Dependency:", formatInr(result.lossOfDependencyTotal))
-                        SummaryRow("Conventional Heads (Consortium/Estate/Funeral):", formatInr(result.totalConventionalHeads))
-                    } else {
-                        SummaryRow("Disability / Future Earning Loss:", formatInr(result.disabilityOrFutureEarningLoss))
-                        SummaryRow("Loss of Income (Treatment):", formatInr(result.lossOfIncomeDuringTreatment))
-                    }
-                    SummaryRow("GROSS COMPENSATION:", formatInr(result.grossCompensation), isBold = true)
-                    if (result.negligenceDeductionAmount > 0) {
-                        SummaryRow("Less Contributory Negligence (${state.contributoryNegligencePercent}%):", "- ${formatInr(result.negligenceDeductionAmount)}")
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    SummaryRow("NET PRINCIPAL AWARD:", formatInr(result.netAwardAmount), isBold = true)
-                    SummaryRow("Interest @ ${state.interestRatePercent}% (${result.totalInterestDays} Days / ${result.formattedDuration}):", "+ ${formatInr(result.interestAmount)}")
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    SummaryRow("TOTAL PAYABLE WITH INTEREST:", formatInr(result.totalPayableWithInterest), isBold = true)
-                }
-            }
-            OutlinedButton(onClick = onJumpToCompromiseTab, modifier = Modifier.fillMaxWidth()) {
-                Text("Analyze in Lok Adalat Compromise Calculator →", fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
-@Composable
-fun LokAdalatCompromiseTabContent(
-    state: McopInputState,
-    result: McopCalculationResult,
-    onStateChange: (McopInputState) -> Unit
-) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("1. CURRENT CLAIM BASELINE (${state.mcopNumber} • ${state.claimMode.label.uppercase()})", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            SummaryRow("Net Principal Award Today:", formatInr(result.netAwardAmount))
-            SummaryRow("Accrued Interest Till Today (${result.totalInterestDays} Days @ ${state.interestRatePercent}%):", "+ ${formatInr(result.interestAmount)}")
-            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-            SummaryRow("TOTAL CLAIM PAYABLE TODAY:", formatInr(result.totalPayableWithInterest), isBold = true)
-        }
-    }
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("2. LOK ADALAT LUMP-SUM COMPROMISE OFFER", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            NumberField(value = state.compromiseOfferInput, onValueChange = { onStateChange(state.copy(compromiseOfferInput = it)) }, label = "Proposed Lump-Sum Compromise Offer (₹)", modifier = Modifier.fillMaxWidth())
-            Text("Quick Interest-Waiver Presets:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AssistChip(onClick = { onStateChange(state.copy(compromiseOfferInput = result.netAwardAmount.roundToLong().toString())) }, label = { Text("100% Principal (0% Interest)", fontSize = 11.sp) })
-                AssistChip(onClick = {
-                    val halfInt = result.netAwardAmount + (result.interestAmount * 0.5)
-                    onStateChange(state.copy(compromiseOfferInput = halfInt.roundToLong().toString()))
-                }, label = { Text("Principal + 50% Interest", fontSize = 11.sp) })
-            }
-            Text("Quick Percentage of Today's Total Payable:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(70, 75, 80, 85, 90).forEach { pct ->
-                    AssistChip(onClick = {
-                        val amt = result.totalPayableWithInterest * (pct / 100.0)
-                        onStateChange(state.copy(compromiseOfferInput = amt.roundToLong().toString()))
-                    }, label = { Text("$pct% (${formatInr(result.totalPayableWithInterest * (pct / 100.0))})", fontSize = 11.sp) })
-                }
-            }
-            Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(10.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    SummaryRow("Settlement Ratio (vs Today's Total):", "${String.format(Locale.US, "%.1f", result.settlementRatioToTodayTotalPercent)}%", isBold = true)
-                    SummaryRow("Settlement Ratio (vs Net Principal):", "${String.format(Locale.US, "%.1f", result.settlementRatioToPrincipalPercent)}%")
-                    SummaryRow("Immediate Haircut / Waiver Today:", if (result.immediateDiscountSaved >= 0) "${formatInr(result.immediateDiscountSaved)} Saved" else "${formatInr(-result.immediateDiscountSaved)} Excess")
-                }
-            }
-        }
-    }
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("3. CONTESTED TRIBUNAL TRIAL PROJECTION", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(value = state.expectedTrialYears, onValueChange = { onStateChange(state.copy(expectedTrialYears = it)) }, label = "Addl. Trial Duration (Yrs)", modifier = Modifier.weight(1f))
-                NumberField(value = state.trialAssessmentHaircutPercent, onValueChange = { onStateChange(state.copy(trialAssessmentHaircutPercent = it)) }, label = "Trial Evidence Haircut %", modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Trial Horizon:", fontSize = 12.sp)
-                listOf("1.0", "2.0", "3.0", "5.0").forEach { yrs ->
-                    AssistChip(onClick = { onStateChange(state.copy(expectedTrialYears = yrs)) }, label = { Text("$yrs Yrs", fontSize = 11.sp) })
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField(value = state.discountOrFdRatePercent, onValueChange = { onStateChange(state.copy(discountOrFdRatePercent = it)) }, label = "Discount / FD Rate (% p.a.)", modifier = Modifier.weight(1f))
-                NumberField(value = state.futureLitigationCost, onValueChange = { onStateChange(state.copy(futureLitigationCost = it)) }, label = "Future Legal / Appeal Cost (₹)", modifier = Modifier.weight(1f))
-            }
-        }
-    }
-
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("4. ACTUARIAL COMPROMISE VS. TRIAL VERDICT", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            val bannerBg = if (result.isOfferFavorableForSettlement) Color(0xFFD4EFDF) else Color(0xFFFADBD8)
-            val bannerTextCol = if (result.isOfferFavorableForSettlement) Color(0xFF0E6251) else Color(0xFF78281F)
-            Box(modifier = Modifier.fillMaxWidth().background(bannerBg, RoundedCornerShape(8.dp)).padding(10.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(text = if (result.isOfferFavorableForSettlement) "FAVORABLE COMPROMISE SETTLEMENT (BELOW NPV CEILING)" else "OFFER EXCEEDS ACTUARIAL NPV CEILING", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = bannerTextCol)
-                    Text(text = "Max Recommended Compromise Ceiling (NPV): ${formatInr(result.npvMaxCompromiseCeiling)}", fontSize = 12.sp, color = bannerTextCol)
-                }
-            }
-            Text("A. Contested Trial Projection (${state.expectedTrialYears} Yrs Later):", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-            SummaryRow("Contested Principal (After ${state.trialAssessmentHaircutPercent}% Trial Haircut):", formatInr(result.contestedPrincipalAfterHaircut))
-            SummaryRow("Total Accrued Interest (${result.totalContestedInterestDays} Days @ ${state.interestRatePercent}%):", "+ ${formatInr(result.projectedContestedInterestAmount)}")
-            SummaryRow("Future Legal, Witness & Appeal Costs:", "+ ${formatInr(state.futureLitigationCost.toDoubleOrNull() ?: 0.0)}")
-            SummaryRow("PROJECTED FUTURE TRIBUNAL OUTFLOW:", formatInr(result.projectedContestedTotalOutflow), isBold = true)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text("B. Insurer / TP Claims Officer Actuarial Metrics:", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-            SummaryRow("Nominal Future Payout Saved:", formatInr(result.nominalFutureSavings))
-            SummaryRow("Present Value (NPV @ ${state.discountOrFdRatePercent}% p.a.) of Trial:", formatInr(result.npvMaxCompromiseCeiling), isBold = true)
-            SummaryRow("Proposed Lok Adalat Lump-Sum Offer:", formatInr(result.compromiseOfferAmount), isBold = true)
-            SummaryRow("Net Present Value (NPV) Capital Gain / Loss:", if (result.npvNetSavingsVsContested >= 0) "+ ${formatInr(result.npvNetSavingsVsContested)} (Gain)" else "- ${formatInr(-result.npvNetSavingsVsContested)} (Loss)", isBold = true)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text("C. Claimant / Petitioner FD Investment View:", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-            SummaryRow("Lump-Sum Invested in FD (@ ${state.discountOrFdRatePercent}% for ${state.expectedTrialYears} Yrs):", formatInr(result.claimantOfferFutureFdValue), isBold = true)
-            SummaryRow("Expected Contested Award in ${state.expectedTrialYears} Yrs (Excl. Costs):", formatInr(result.contestedPrincipalAfterHaircut + result.projectedContestedInterestAmount))
-            SummaryRow("Claimant FD Maturity vs Waiting for Trial:", if (result.claimantFdAdvantageVsTrial >= 0) "+ ${formatInr(result.claimantFdAdvantageVsTrial)} Better Now" else "${formatInr(result.claimantFdAdvantageVsTrial)} vs Trial")
-        }
-    }
-}
-
-@Composable
-fun TreatmentIncomeLossRow(state: McopInputState, result: McopCalculationResult, onStateChange: (McopInputState) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        NumberField(value = state.treatmentRestMonths, onValueChange = { onStateChange(state.copy(treatmentRestMonths = it)) }, label = "Bed Rest / Treatment (Months)", modifier = Modifier.weight(1f))
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Loss of Income (Treatment)", fontSize = 11.sp, color = Color.Gray)
-            Text(formatInr(result.lossOfIncomeDuringTreatment), fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun NumberField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input -> if (input.all { it.isDigit() || it == '.' }) onValueChange(input) },
-        label = { Text(label, fontSize = 11.5.sp) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true,
-        modifier = modifier
+    return McopCalculationResult(
+        netAnnualIncome = annualIncome,
+        multiplier = multiplier,
+        netAwardAmount = netAward,
+        interestAmount = interestAmount,
+        totalPayableWithInterest = totalPayable,
+        compromiseOfferAmount = compromiseOffer,
+        compromisePercentageOfTotal = compromisePct,
+        npvMaxCompromiseCeiling = npvCeiling,
+        heads = heads
     )
 }
 
-@Composable
-fun SummaryRow(label: String, value: String, isBold: Boolean = false) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 12.2.sp, fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1.4f))
-        Text(value, fontSize = 12.2.sp, fontWeight = if (isBold) FontWeight.Bold else FontWeight.SemiBold)
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun McopDatePickerModal(initialDate: LocalDate, onDateSelected: (LocalDate) -> Unit, onDismiss: () -> Unit) {
-    val initialMillis = initialDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                datePickerState.selectedDateMillis?.let { millis ->
-                    onDateSelected(Instant.ofEpochMilli(millis).atZone(ZoneId.of("UTC")).toLocalDate())
+fun McopCalculatorApp() {
+    val context = LocalContext.current
+
+    var mcopNumber by remember { mutableStateOf("20/2026") }
+    var claimantName by remember { mutableStateOf("Jeeva") }
+    var ageStr by remember { mutableStateOf("34") }
+    var monthlyIncomeStr by remember { mutableStateOf("15000") }
+    var disabilityStr by remember { mutableStateOf("20") }
+    var ratePerPctStr by remember { mutableStateOf("7000") }
+    var dependentsStr by remember { mutableStateOf("3") }
+    var medicalStr by remember { mutableStateOf("25000") }
+    var painSufferingStr by remember { mutableStateOf("40000") }
+    var attendantStr by remember { mutableStateOf("20000") }
+    var amenitiesStr by remember { mutableStateOf("25000") }
+    var prospectsStr by remember { mutableStateOf("40") }
+    var interestRateStr by remember { mutableStateOf("7.5") }
+    var petitionDateLabel by remember { mutableStateOf("09-05-2024") }
+    var daysStr by remember { mutableStateOf("914") }
+    var customOfferStr by remember { mutableStateOf("") }
+
+    var selectedMode by remember { mutableStateOf(ClaimMode.PARTIAL) }
+    var includeInterestInExport by remember { mutableStateOf(true) }
+    var includeLokAdalatInExport by remember { mutableStateOf(true) }
+
+    val age = ageStr.toIntOrNull() ?: 34
+    val monthlyIncome = monthlyIncomeStr.toDoubleOrNull() ?: 15000.0
+    val disability = disabilityStr.toDoubleOrNull() ?: 20.0
+    val ratePerPct = ratePerPctStr.toDoubleOrNull() ?: 7000.0
+    val dependents = dependentsStr.toIntOrNull() ?: 3
+    val medical = medicalStr.toDoubleOrNull() ?: 0.0
+    val painSuffering = painSufferingStr.toDoubleOrNull() ?: 0.0
+    val attendant = attendantStr.toDoubleOrNull() ?: 0.0
+    val amenities = amenitiesStr.toDoubleOrNull() ?: 0.0
+    val prospects = prospectsStr.toDoubleOrNull() ?: 40.0
+    val interestRate = interestRateStr.toDoubleOrNull() ?: 7.5
+    val days = daysStr.toLongOrNull() ?: 914L
+    val customOffer = customOfferStr.toDoubleOrNull()
+
+    val result = remember(
+        selectedMode, monthlyIncome, age, disability, ratePerPct,
+        dependents, medical, painSuffering, attendant, amenities,
+        prospects, interestRate, days, customOffer
+    ) {
+        calculateCompensation(
+            selectedMode, monthlyIncome, age, disability, ratePerPct,
+            dependents, medical, painSuffering, attendant, amenities,
+            prospects, interestRate, days, customOffer
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Gavel,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "MCOP Compensation Calculator",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Kamaraj Law Office • Motor Claims Portal",
+                                fontSize = 11.sp,
+                                color = Color(0xFFD4E6F1)
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = PrimaryNavy,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                ),
+                actions = {
+                    IconButton(onClick = {
+                        val text = formatExportText(
+                            mcopNumber, claimantName, age, petitionDateLabel, days,
+                            interestRate, selectedMode, result,
+                            includeInterestInExport, includeLokAdalatInExport
+                        )
+                        shareText(context, text)
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Share WhatsApp Memo")
+                    }
+                    IconButton(onClick = {
+                        exportPdfMemo(
+                            context, mcopNumber, claimantName, age, petitionDateLabel, days,
+                            interestRate, selectedMode, result,
+                            includeInterestInExport, includeLokAdalatInExport
+                        )
+                    }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF")
+                    }
                 }
-                onDismiss()
-            }) { Text("Confirm") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    ) { DatePicker(state = datePickerState) }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(SurfaceBg)
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Mode Selection Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "CLAIM CATEGORY",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        ClaimMode.values().forEachIndexed { index, mode ->
+                            SegmentedButton(
+                                selected = selectedMode == mode,
+                                onClick = { selectedMode = mode },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = ClaimMode.values().size
+                                ),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = PrimaryNavy,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.White,
+                                    inactiveContentColor = PrimaryNavy
+                                )
+                            ) {
+                                Text(mode.shortLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Case & Income Details Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "1. CASE & CLAIMANT PARAMETERS",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 13.sp
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = mcopNumber,
+                            onValueChange = { mcopNumber = it },
+                            label = { Text("MCOP No.") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = claimantName,
+                            onValueChange = { claimantName = it },
+                            label = { Text("Claimant Name") },
+                            modifier = Modifier.weight(1.3f),
+                            singleLine = true
+                        )
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = ageStr,
+                            onValueChange = { ageStr = it },
+                            label = { Text("Age (Yrs)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = monthlyIncomeStr,
+                            onValueChange = { monthlyIncomeStr = it },
+                            label = { Text("Monthly Income (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1.3f),
+                            singleLine = true
+                        )
+                    }
+
+                    when (selectedMode) {
+                        ClaimMode.FATAL -> {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = dependentsStr,
+                                    onValueChange = { dependentsStr = it },
+                                    label = { Text("No. of Dependents") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = prospectsStr,
+                                    onValueChange = { prospectsStr = it },
+                                    label = { Text("Future Prospects %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        ClaimMode.PERMANENT -> {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = disabilityStr,
+                                    onValueChange = { disabilityStr = it },
+                                    label = { Text("Functional Disab. %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = prospectsStr,
+                                    onValueChange = { prospectsStr = it },
+                                    label = { Text("Future Prospects %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        ClaimMode.PARTIAL -> {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = disabilityStr,
+                                    onValueChange = { disabilityStr = it },
+                                    label = { Text("Disability %") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = ratePerPctStr,
+                                    onValueChange = { ratePerPctStr = it },
+                                    label = { Text("Rate per % (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        ClaimMode.TEMPORARY -> {
+                            OutlinedTextField(
+                                value = disabilityStr,
+                                onValueChange = { disabilityStr = it },
+                                label = { Text("Treatment / Loss of Income Duration (Months)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Pecuniary & Non-Pecuniary Heads Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "2. CONVENTIONAL HEADS & INTEREST",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 13.sp
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = medicalStr,
+                            onValueChange = { medicalStr = it },
+                            label = { Text("Medical Bills (₹)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        if (selectedMode != ClaimMode.FATAL) {
+                            OutlinedTextField(
+                                value = painSufferingStr,
+                                onValueChange = { painSufferingStr = it },
+                                label = { Text("Pain & Suffering (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+                    }
+
+                    if (selectedMode != ClaimMode.FATAL) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = attendantStr,
+                                onValueChange = { attendantStr = it },
+                                label = { Text("Attendant/Nourish (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            if (selectedMode != ClaimMode.TEMPORARY) {
+                                OutlinedTextField(
+                                    value = amenitiesStr,
+                                    onValueChange = { amenitiesStr = it },
+                                    label = { Text("Loss of Amenities (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = petitionDateLabel,
+                            onValueChange = { petitionDateLabel = it },
+                            label = { Text("Petition Date") },
+                            modifier = Modifier.weight(1.2f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = daysStr,
+                            onValueChange = { daysStr = it },
+                            label = { Text("Days") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(0.8f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = interestRateStr,
+                            onValueChange = { interestRateStr = it },
+                            label = { Text("Int %") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(0.8f),
+                            singleLine = true
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = customOfferStr,
+                        onValueChange = { customOfferStr = it },
+                        label = { Text("Custom Lok Adalat Offer ₹ (Leave blank for 85% auto)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+
+            // Head-Wise Bifurcation Live Summary Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = LightBlueBg),
+                elevation = CardDefaults.cardElevation(3.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "HEAD-WISE BIFURCATION",
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryNavy,
+                            fontSize = 14.sp
+                        )
+                        Surface(
+                            color = PrimaryNavy,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "Age: $age | Mult: ${result.multiplier}",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+
+                    result.heads.forEachIndexed { idx, head ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${idx + 1}. ${head.headName}",
+                                fontSize = 13.sp,
+                                color = Color(0xFF1C2833),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = formatInr(head.amount),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1C2833)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("NET PRINCIPAL AWARD:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PrimaryNavy)
+                        Text(formatInr(result.netAwardAmount), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryNavy)
+                    }
+
+                    if (includeInterestInExport) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Interest (${interestRate}% from $petitionDateLabel • $days days):",
+                                fontSize = 12.sp,
+                                color = AccentGreen
+                            )
+                            Text(
+                                text = "+ ${formatInr(result.interestAmount)}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AccentGreen
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("TOTAL PAYABLE TODAY:", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = AccentRed)
+                            Text(formatInr(result.totalPayableWithInterest), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = AccentRed)
+                        }
+                    }
+
+                    if (includeLokAdalatInExport) {
+                        HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
+                        Text(
+                            text = "LOK ADALAT COMPROMISE ANALYSIS (NO SEPARATE INTEREST)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = AccentPurple
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "• Consolidated Lump Sum Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%):",
+                                fontSize = 13.sp,
+                                color = AccentPurple
+                            )
+                            Text(
+                                text = formatInr(result.compromiseOfferAmount),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = AccentPurple
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("• Max NPV Settlement Ceiling:", fontSize = 13.sp, color = AccentPurple)
+                            Text(formatInr(result.npvMaxCompromiseCeiling), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentPurple)
+                        }
+                    }
+                }
+            }
+
+            // Export Preferences & Action Buttons Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(2.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "3. EXPORT & SHARE CONTROLS",
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryNavy,
+                        fontSize = 13.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Include Interest Projection", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Turn off to export Principal Award or Lok Adalat only", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = includeInterestInExport,
+                            onCheckedChange = { includeInterestInExport = it }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Include Lok Adalat Compromise Section", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Lump-sum compromise without interest breakdown", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = includeLokAdalatInExport,
+                            onCheckedChange = { includeLokAdalatInExport = it }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val text = formatExportText(
+                                    mcopNumber, claimantName, age, petitionDateLabel, days,
+                                    interestRate, selectedMode, result,
+                                    includeInterestInExport, includeLokAdalatInExport
+                                )
+                                shareText(context, text)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("WhatsApp", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                exportPdfMemo(
+                                    context, mcopNumber, claimantName, age, petitionDateLabel, days,
+                                    interestRate, selectedMode, result,
+                                    includeInterestInExport, includeLokAdalatInExport
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryBlue),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("PDF Memo", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                exportCsvForSheets(
+                                    context, mcopNumber, claimantName, age, selectedMode,
+                                    result, includeInterestInExport
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("CSV", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
-fun formatInr(amount: Double): String {
-    val format = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
-    format.maximumFractionDigits = 0
-    return format.format(amount.roundToLong())
+fun formatExportText(
+    mcopNo: String,
+    name: String,
+    age: Int,
+    petitionDate: String,
+    days: Long,
+    interestRate: Double,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean,
+    includeLokAdalat: Boolean
+): String {
+    val sb = StringBuilder()
+    sb.append("*MCOP CALCULATION & COMPROMISE MEMO (${mode.shortLabel.uppercase()})*\n")
+    sb.append("----------------------------------------\n")
+    sb.append("MCOP No: *$mcopNo*\n")
+    sb.append("Claimant: *$name*\n")
+    sb.append("Age / Multiplier: $age Yrs (Mult: ${result.multiplier})\n")
+    sb.append("Net Annual Income: ${formatInr(result.netAnnualIncome)}\n\n")
+
+    sb.append("*HEAD-WISE BIFURCATION:*\n")
+    result.heads.forEachIndexed { index, head ->
+        sb.append("${index + 1}. ${head.headName}: *${formatInr(head.amount)}*\n")
+    }
+    sb.append("----------------------------------------\n")
+    sb.append("*NET PRINCIPAL AWARD: ${formatInr(result.netAwardAmount)}*\n")
+
+    if (includeInterest) {
+        sb.append("Interest (${interestRate}% from $petitionDate - $days days): +${formatInr(result.interestAmount)}\n")
+        sb.append("*TOTAL PAYABLE TODAY: ${formatInr(result.totalPayableWithInterest)}*\n")
+    }
+
+    if (includeLokAdalat) {
+        sb.append("========================================\n")
+        sb.append("*LOK ADALAT COMPROMISE (CONSOLIDATED)*\n")
+        sb.append("• Proposed Consolidated Offer: *${formatInr(result.compromiseOfferAmount)}* (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%)\n")
+        sb.append("• Max NPV Ceiling: *${formatInr(result.npvMaxCompromiseCeiling)}*\n")
+        sb.append("_(Full & final consolidated settlement without separate interest)_")
+    }
+
+    return sb.toString()
 }
 
-object McopExportManager {
-    private val dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
-
-    fun shareWhatsAppSummary(context: Context, state: McopInputState, result: McopCalculationResult) {
-        val text = buildString {
-            appendLine("*MCOP CALCULATION & COMPROMISE MEMO (${state.claimMode.label.uppercase()})*")
-            appendLine("--------------------------------")
-            appendLine("*MCOP No:* ${state.mcopNumber}")
-            if (state.claimantName.isNotBlank()) {
-                appendLine("*${if (state.claimMode == ClaimMode.FATAL_DEATH) "Deceased" else "Claimant"}:* ${state.claimantName}")
-            }
-            appendLine("*Age / Multiplier:* ${state.age} Yrs (Mult: ${result.multiplier})")
-            appendLine("*Net Annual Income:* ${formatInr(result.netAnnualIncome)}")
-            appendLine("--------------------------------")
-            appendLine("*NET PRINCIPAL AWARD:* *${formatInr(result.netAwardAmount)}*")
-            appendLine("*Interest (${state.interestRatePercent}% from ${state.petitionDate.format(dateFormatter)} - ${result.totalInterestDays} days):* +${formatInr(result.interestAmount)}")
-            appendLine("*TOTAL PAYABLE TODAY:* *${formatInr(result.totalPayableWithInterest)}*")
-            if (result.compromiseOfferAmount > 0) {
-                appendLine("================================")
-                appendLine("*LOK ADALAT COMPROMISE ANALYSIS*")
-                appendLine("• *Proposed Offer:* *${formatInr(result.compromiseOfferAmount)}* (${String.format(Locale.US, "%.1f", result.settlementRatioToTodayTotalPercent)}%)")
-                appendLine("• *Max NPV Ceiling:* *${formatInr(result.npvMaxCompromiseCeiling)}*")
-            }
-        }
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
-        }
-        context.startActivity(Intent.createChooser(intent, "Share Summary"))
+fun shareText(context: Context, text: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
     }
+    context.startActivity(Intent.createChooser(intent, "Share MCOP Memo"))
+}
 
-   fun exportCsvForSheets(context: Context, state: McopInputState, result: McopCalculationResult) {
-        try {
-            val csvHeader = "MCOP_No,Name,Age,Mode,Net_Annual_Income,Multiplier,Net_Award,Total_Payable_Today,Lok_Adalat_Offer,NPV_Ceiling\n"
-            val csvRow = listOf(
-                state.mcopNumber, state.claimantName.replace(",", " "), state.age, state.claimMode.label,
-                result.netAnnualIncome.roundToLong().toString(), result.multiplier.toString(),
-                result.netAwardAmount.roundToLong().toString(), result.totalPayableWithInterest.roundToLong().toString(),
-                result.compromiseOfferAmount.roundToLong().toString(), result.npvMaxCompromiseCeiling.roundToLong().toString()
-            ).joinToString(",")
-            val file = File(context.cacheDir, "MCOP_${state.mcopNumber.replace("/", "_")}.csv")
-            FileOutputStream(file).use { it.write((csvHeader + csvRow).toByteArray()) }
-            shareFile(context, file, "text/csv", "Export CSV")
-        } catch (e: Exception) {
-            Toast.makeText(context, "CSV Error: ${e.message}", Toast.LENGTH_LONG).show()
+fun exportPdfMemo(
+    context: Context,
+    mcopNo: String,
+    name: String,
+    age: Int,
+    petitionDate: String,
+    days: Long,
+    interestRate: Double,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean,
+    includeLokAdalat: Boolean
+) {
+    try {
+        val pdfDocument = PdfDocument()
+        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val page = pdfDocument.startPage(pageInfo)
+        val canvas: Canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 13f
+            color = android.graphics.Color.rgb(27, 79, 114)
+            textAlign = Paint.Align.CENTER
         }
-    }
+        val subHeaderPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 11f
+            color = android.graphics.Color.BLACK
+        }
+        val bodyPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 10.5f
+            color = android.graphics.Color.DKGRAY
+        }
+        val amountBoldPaint = Paint().apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 10.5f
+            color = android.graphics.Color.BLACK
+            textAlign = Paint.Align.RIGHT
+        }
+        val linePaint = Paint().apply {
+            color = android.graphics.Color.LTGRAY
+            strokeWidth = 1f
+        }
 
-    fun exportPdfCourtMemo(context: Context, state: McopInputState, result: McopCalculationResult) {
-        try {
-            val pdfDocument = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-            val page = pdfDocument.startPage(pageInfo)
-            val canvas: Canvas = page.canvas
+        var y = 45f
+        canvas.drawText("BEFORE THE MOTOR ACCIDENTS CLAIMS TRIBUNAL / LOK ADALAT", 297.5f, y, titlePaint)
+        y += 18f
+        canvas.drawText("CALCULATION & BIFURCATION MEMO IN M.C.O.P. No. $mcopNo", 297.5f, y, titlePaint)
+        y += 15f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
 
-            val titlePaint = Paint().apply { typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textSize = 13.5f; color = AndroidColor.BLACK; textAlign = Paint.Align.CENTER }
-            val boldPaint = Paint().apply { typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textSize = 10f; color = AndroidColor.BLACK }
-            val normalPaint = Paint().apply { typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL); textSize = 9.5f; color = AndroidColor.BLACK }
-            val rightBoldPaint = Paint(boldPaint).apply { textAlign = Paint.Align.RIGHT }
-            val rightNormalPaint = Paint(normalPaint).apply { textAlign = Paint.Align.RIGHT }
-            val linePaint = Paint().apply { color = AndroidColor.DKGRAY; strokeWidth = 1f }
+        y += 22f
+        canvas.drawText("Claimant Name: $name", 45f, y, subHeaderPaint)
+        canvas.drawText("Category: ${mode.label}", 320f, y, bodyPaint)
+        y += 18f
+        canvas.drawText("Age / Multiplier: $age Yrs (Multiplier: ${result.multiplier})", 45f, y, bodyPaint)
+        canvas.drawText("Annual Income: ${formatInr(result.netAnnualIncome)}", 320f, y, bodyPaint)
+        y += 15f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
 
-            var y = 40f
-            canvas.drawText("BEFORE THE MOTOR ACCIDENTS CLAIMS TRIBUNAL / LOK ADALAT", 297f, y, titlePaint)
-            y += 16f
-            canvas.drawText("CALCULATION MEMO IN M.C.O.P. No. ${state.mcopNumber}", 297f, y, titlePaint)
+        // Table Header
+        y += 22f
+        canvas.drawText("S.No.", 45f, y, subHeaderPaint)
+        canvas.drawText("HEAD OF COMPENSATION", 90f, y, subHeaderPaint)
+        canvas.drawText("AMOUNT (INR)", 545f, y, amountBoldPaint)
+        y += 10f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        // Head-Wise Rows
+        result.heads.forEachIndexed { index, head ->
+            y += 20f
+            canvas.drawText("${index + 1}.", 45f, y, bodyPaint)
+            canvas.drawText(head.headName, 90f, y, bodyPaint)
+            canvas.drawText(formatInr(head.amount), 545f, y, amountBoldPaint)
+        }
+
+        y += 12f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+
+        // Net Principal Award
+        y += 22f
+        canvas.drawText("NET PRINCIPAL AWARD AMOUNT", 45f, y, subHeaderPaint)
+        canvas.drawText(formatInr(result.netAwardAmount), 545f, y, amountBoldPaint)
+
+        if (includeInterest) {
+            y += 20f
+            canvas.drawText("Interest @ ${interestRate}% p.a. (from $petitionDate for $days days)", 45f, y, bodyPaint)
+            canvas.drawText("+ ${formatInr(result.interestAmount)}", 545f, y, amountBoldPaint)
+
             y += 12f
-            canvas.drawLine(40f, y, 555f, y, linePaint)
-
-            y += 16f
-            canvas.drawText("Net Principal Award: ${formatInr(result.netAwardAmount)}", 45f, y, normalPaint)
-            canvas.drawText("Total Payable: ${formatInr(result.totalPayableWithInterest)}", 330f, y, normalPaint)
-            y += 16f
-            canvas.drawText("Lok Adalat Offer: ${formatInr(result.compromiseOfferAmount)}", 45f, y, normalPaint)
-            canvas.drawText("NPV Ceiling: ${formatInr(result.npvMaxCompromiseCeiling)}", 330f, y, normalPaint)
-
-            pdfDocument.finishPage(page)
-            val file = File(context.cacheDir, "MCOP_Memo_${state.mcopNumber.replace("/", "_")}.pdf")
-            FileOutputStream(file).use { pdfDocument.writeTo(it) }
-            pdfDocument.close()
-            shareFile(context, file, "application/pdf", "Share PDF")
-        } catch (e: Exception) {
-            Toast.makeText(context, "PDF Error: ${e.message}", Toast.LENGTH_LONG).show()
+            canvas.drawLine(45f, y, 550f, y, linePaint)
+            y += 22f
+            canvas.drawText("TOTAL PAYABLE TODAY (WITH INTEREST)", 45f, y, subHeaderPaint)
+            canvas.drawText(formatInr(result.totalPayableWithInterest), 545f, y, amountBoldPaint)
         }
-    }
 
-    private fun shareFile(context: Context, file: File, mimeType: String, chooserTitle: String) {
+        if (includeLokAdalat) {
+            y += 28f
+            canvas.drawLine(45f, y, 550f, y, linePaint)
+            y += 22f
+            canvas.drawText("LOK ADALAT COMPROMISE PROPOSAL (WITHOUT SEPARATE INTEREST)", 45f, y, subHeaderPaint)
+            y += 20f
+            canvas.drawText(
+                "• Proposed Consolidated Settlement Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%)",
+                55f,
+                y,
+                bodyPaint
+            )
+            canvas.drawText(formatInr(result.compromiseOfferAmount), 545f, y, amountBoldPaint)
+
+            y += 18f
+            canvas.drawText("• Maximum Actuarial NPV Ceiling", 55f, y, bodyPaint)
+            canvas.drawText(formatInr(result.npvMaxCompromiseCeiling), 545f, y, amountBoldPaint)
+        }
+
+        y = 790f
+        canvas.drawLine(45f, y, 550f, y, linePaint)
+        y += 16f
+        canvas.drawText("Generated via Kamaraj Law Office MCOP Compensation Calculator", 45f, y, bodyPaint)
+
+        pdfDocument.finishPage(page)
+
+        val safeNo = mcopNo.replace("/", "_").replace(" ", "_")
+        val file = File(context.cacheDir, "MCOP_Memo_$safeNo.pdf")
+        FileOutputStream(file).use { pdfDocument.writeTo(it) }
+        pdfDocument.close()
+
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
+            type = "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, chooserTitle))
+        context.startActivity(Intent.createChooser(intent, "Share PDF Calculation Memo"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "PDF Error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun exportCsvForSheets(
+    context: Context,
+    mcopNo: String,
+    name: String,
+    age: Int,
+    mode: ClaimMode,
+    result: McopCalculationResult,
+    includeInterest: Boolean
+) {
+    try {
+        val headsSummary = result.heads.joinToString(" | ") { "${it.headName}: ${it.amount.roundToLong()}" }
+        val csvHeader = "MCOP_No,Claimant,Age,Mode,Net_Annual_Income,Multiplier,Head_Wise_Breakdown,Net_Principal_Award,Interest_Amount,Total_Payable,Lok_Adalat_Offer,NPV_Ceiling\n"
+        val interestVal = if (includeInterest) result.interestAmount.roundToLong() else 0L
+        val totalVal = if (includeInterest) result.totalPayableWithInterest.roundToLong() else result.netAwardAmount.roundToLong()
+        val csvRow = listOf(
+            mcopNo,
+            name.replace(",", " "),
+            age.toString(),
+            mode.shortLabel,
+            result.netAnnualIncome.roundToLong().toString(),
+            result.multiplier.toString(),
+            "\"$headsSummary\"",
+            result.netAwardAmount.roundToLong().toString(),
+            interestVal.toString(),
+            totalVal.toString(),
+            result.compromiseOfferAmount.roundToLong().toString(),
+            result.npvMaxCompromiseCeiling.roundToLong().toString()
+        ).joinToString(",") + "\n"
+
+        val safeNo = mcopNo.replace("/", "_").replace(" ", "_")
+        val file = File(context.cacheDir, "MCOP_$safeNo.csv")
+        FileOutputStream(file).use { it.write((csvHeader + csvRow).toByteArray()) }
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Export CSV for Google Sheets"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "CSV Error: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }

@@ -1,6 +1,7 @@
 package com.kamarajlawoffice.mcopcalculator
 
 import android.app.Activity
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -10,20 +11,23 @@ import android.graphics.pdf.PdfDocument
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,13 +35,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -49,6 +59,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.*
 import kotlin.math.pow
 import kotlin.math.roundToLong
@@ -58,6 +71,11 @@ enum class ClaimMode(val label: String, val shortLabel: String) {
     PERMANENT("Permanent Disability (Multiplier)", "Perm %"),
     PARTIAL("Partial Disability (Per % Point)", "Partial %"),
     TEMPORARY("Simple / Temporary Injury", "Temp")
+}
+
+enum class AppScreen {
+    CALCULATOR,
+    SAVED_CASES
 }
 
 data class HeadBifurcation(
@@ -107,14 +125,19 @@ data class SavedMcopCase(
     val netAwardPreview: Long
 )
 
-val PrimaryNavy = Color(0xFF1B4F72)
-val SecondaryBlue = Color(0xFF2874A6)
-val LightBlueBg = Color(0xFFEBF5FB)
-val SurfaceBg = Color(0xFFF4F6F7)
-val AccentGreen = Color(0xFF1E8449)
-val AccentPurple = Color(0xFF6C3483)
-val AccentRed = Color(0xFFB03A2E)
-val GoldAccent = Color(0xFFD4AC0D)
+// Palette synchronized directly with the Royal Navy & Gold App Icon
+val IconRoyalNavy = Color(0xFF154360)
+val IconDeepNavy = Color(0xFF0E2F44)
+val IconBadgeBlue = Color(0xFF2E86C1)
+val IconGoldRing = Color(0xFFD4AC0D)
+val IconGoldBright = Color(0xFFF4D03F)
+val CreamBg = Color(0xFFF8F9FA)
+val CardWarmBg = Color(0xFFFFFFFF)
+val GoldTintBg = Color(0xFFFEF9E7)
+val NavyTintBg = Color(0xFFEBF5FB)
+val EmeraldGreen = Color(0xFF1E8449)
+val CrimsonRed = Color(0xFFA93226)
+val RoyalPurple = Color(0xFF6C3483)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,33 +147,35 @@ class MainActivity : ComponentActivity() {
             if (!view.isInEditMode) {
                 SideEffect {
                     val window = (view.context as Activity).window
-                    window.statusBarColor = PrimaryNavy.toArgb()
-                    window.navigationBarColor = PrimaryNavy.toArgb()
+                    window.statusBarColor = IconDeepNavy.toArgb()
+                    window.navigationBarColor = IconDeepNavy.toArgb()
                     WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
                 }
             }
 
             MaterialTheme(
                 colorScheme = lightColorScheme(
-                    primary = PrimaryNavy,
+                    primary = IconRoyalNavy,
                     onPrimary = Color.White,
-                    primaryContainer = LightBlueBg,
-                    onPrimaryContainer = PrimaryNavy,
-                    secondary = SecondaryBlue,
-                    background = SurfaceBg,
-                    surface = Color.White
+                    primaryContainer = NavyTintBg,
+                    onPrimaryContainer = IconRoyalNavy,
+                    secondary = IconGoldRing,
+                    onSecondary = IconDeepNavy,
+                    tertiary = IconBadgeBlue,
+                    background = CreamBg,
+                    surface = CardWarmBg
                 )
             ) {
                 var showSplash by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
-                    delay(1300)
+                    delay(1200)
                     showSplash = false
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (!showSplash) {
-                        McopCalculatorApp()
+                        McopMainContainer()
                     }
                     AnimatedVisibility(
                         visible = showSplash,
@@ -170,7 +195,7 @@ fun SplashScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PrimaryNavy),
+            .background(IconRoyalNavy),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -180,19 +205,20 @@ fun SplashScreen() {
         ) {
             Box(
                 modifier = Modifier
-                    .size(104.dp)
+                    .size(106.dp)
                     .clip(CircleShape)
-                    .background(GoldAccent.copy(alpha = 0.2f)),
+                    .border(3.dp, IconGoldRing, CircleShape)
+                    .background(IconDeepNavy),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Balance,
                     contentDescription = "App Logo",
-                    tint = GoldAccent,
-                    modifier = Modifier.size(60.dp)
+                    tint = IconGoldBright,
+                    modifier = Modifier.size(58.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(22.dp))
             Text(
                 text = "MCOP Compensation\nCalculator",
                 color = Color.White,
@@ -203,14 +229,14 @@ fun SplashScreen() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Motor Accident Claims & Compromise Portal",
-                color = Color(0xFFD4E6F1),
-                fontSize = 14.sp,
+                text = "Motor Accident Claims & Actuarial Portal",
+                color = IconGoldBright,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(30.dp))
             CircularProgressIndicator(
-                color = GoldAccent,
+                color = IconGoldBright,
                 strokeWidth = 3.dp,
                 modifier = Modifier.size(28.dp)
             )
@@ -237,6 +263,26 @@ fun getMultiplier(age: Int): Int {
         age in 61..65 -> 7
         else -> 5
     }
+}
+
+/**
+ * Automatically parses dd-MM-yyyy or dd/MM/yyyy or yyyy-MM-dd and returns days up to today.
+ */
+fun computeDaysFromPetitionDate(dateStr: String): Long? {
+    val cleaned = dateStr.trim()
+    if (cleaned.length < 8) return null
+    val patterns = listOf("dd-MM-yyyy", "dd/MM/yyyy", "d-M-yyyy", "d/M/yyyy", "yyyy-MM-dd")
+    for (pattern in patterns) {
+        try {
+            val formatter = DateTimeFormatter.ofPattern(pattern, Locale.US)
+            val parsedDate = LocalDate.parse(cleaned, formatter)
+            val today = LocalDate.now()
+            val diff = ChronoUnit.DAYS.between(parsedDate, today)
+            return diff.coerceAtLeast(0L)
+        } catch (_: Exception) {
+        }
+    }
+    return null
 }
 
 fun calculateCompensation(
@@ -279,7 +325,6 @@ fun calculateCompensation(
             val effectiveAnnualIncome = annualIncome * prospectsFactor * (1.0 - deductionFraction)
             val lossOfDependency = effectiveAnnualIncome * multiplier
 
-            // Pranay Sethi 10% escalation every 3 years since 2017
             val escalationFactor = (1.10).pow(pranaySethiSteps.coerceIn(0, 5))
             val perConsortium = (40000.0 * escalationFactor).roundToLong().toDouble()
             val estateAndFuneral = (15000.0 * escalationFactor).roundToLong().toDouble()
@@ -287,63 +332,55 @@ fun calculateCompensation(
 
             val stepLabel = if (pranaySethiSteps > 0) " [+${pranaySethiSteps}x10%]" else ""
 
-            heads.add(HeadBifurcation("Loss of Dependency (Mult: $multiplier)", lossOfDependency))
-            heads.add(HeadBifurcation("Loss of Consortium ($dependentsCount × ₹${perConsortium.toInt()}$stepLabel)", consortiumTotal))
+            heads.add(HeadBifurcation("Dependency (M:$multiplier)", lossOfDependency))
+            heads.add(HeadBifurcation("Consortium ($dependentsCount×₹${perConsortium.toInt()}$stepLabel)", consortiumTotal))
             heads.add(HeadBifurcation("Loss of Estate$stepLabel", estateAndFuneral))
-            heads.add(HeadBifurcation("Funeral Expenses$stepLabel", estateAndFuneral))
-            if (transportationCharges > 0) {
-                heads.add(HeadBifurcation("Transportation of Body / Ambulance", transportationCharges))
-            }
-            if (clothingDamage > 0) {
-                heads.add(HeadBifurcation("Damage to Clothing & Articles", clothingDamage))
-            }
-            if (medicalExpenses > 0) {
-                heads.add(HeadBifurcation("Medical Expenses (Pre-Death)", medicalExpenses))
-            }
+            heads.add(HeadBifurcation("Funeral Exp.$stepLabel", estateAndFuneral))
+            if (transportationCharges > 0) heads.add(HeadBifurcation("Transport / Ambulance", transportationCharges))
+            if (clothingDamage > 0) heads.add(HeadBifurcation("Clothing & Articles", clothingDamage))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Pre-Death Medical", medicalExpenses))
         }
         ClaimMode.PERMANENT -> {
             val lossOfEarningCapacity = annualIncome * prospectsFactor * (disabilityPercent / 100.0) * multiplier
-            heads.add(HeadBifurcation("Loss of Earning Capacity (${disabilityPercent.toInt()}% • Mult: $multiplier)", lossOfEarningCapacity))
+            heads.add(HeadBifurcation("Earning Loss (${disabilityPercent.toInt()}% • M:$multiplier)", lossOfEarningCapacity))
             if (lossOfIncomeMonths > 0 && monthlyIncome > 0) {
-                heads.add(HeadBifurcation("Loss of Income During Treatment (${lossOfIncomeMonths.toInt()} Mos)", monthlyIncome * lossOfIncomeMonths))
+                heads.add(HeadBifurcation("Treatment Income Loss (${lossOfIncomeMonths.toInt()}m)", monthlyIncome * lossOfIncomeMonths))
             }
             if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
-            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Inpatient Treatment", medicalExpenses))
-            if (futureMedicalExpenses > 0) heads.add(HeadBifurcation("Future Medical Expenses", futureMedicalExpenses))
-            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation to Hospital", transportationCharges))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills", medicalExpenses))
+            if (futureMedicalExpenses > 0) heads.add(HeadBifurcation("Future Medical", futureMedicalExpenses))
+            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation", transportationCharges))
             if (extraNourishment > 0) heads.add(HeadBifurcation("Extra Nourishment", extraNourishment))
             if (attendantCharges > 0) heads.add(HeadBifurcation("Attendant Charges", attendantCharges))
-            if (clothingDamage > 0) heads.add(HeadBifurcation("Damage to Clothing & Articles", clothingDamage))
-            if (lossOfAmenities > 0) heads.add(HeadBifurcation("Loss of Amenities / Marriage Prospects", lossOfAmenities))
+            if (clothingDamage > 0) heads.add(HeadBifurcation("Clothing Damage", clothingDamage))
+            if (lossOfAmenities > 0) heads.add(HeadBifurcation("Loss of Amenities", lossOfAmenities))
         }
         ClaimMode.PARTIAL -> {
             val disabilityAward = disabilityPercent * ratePerPercentage
-            heads.add(HeadBifurcation("Permanent Disability (${disabilityPercent.toInt()}% × ₹${ratePerPercentage.toInt()})", disabilityAward))
+            heads.add(HeadBifurcation("Disability (${disabilityPercent.toInt()}% × ₹${ratePerPercentage.toInt()})", disabilityAward))
             if (lossOfIncomeMonths > 0 && monthlyIncome > 0) {
-                heads.add(HeadBifurcation("Loss of Income During Treatment (${lossOfIncomeMonths.toInt()} Mos)", monthlyIncome * lossOfIncomeMonths))
+                heads.add(HeadBifurcation("Treatment Income Loss (${lossOfIncomeMonths.toInt()}m)", monthlyIncome * lossOfIncomeMonths))
             }
             if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
-            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Treatment", medicalExpenses))
-            if (futureMedicalExpenses > 0) heads.add(HeadBifurcation("Future Medical / Implant Removal", futureMedicalExpenses))
-            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation Charges", transportationCharges))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills", medicalExpenses))
+            if (futureMedicalExpenses > 0) heads.add(HeadBifurcation("Future Medical", futureMedicalExpenses))
+            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation", transportationCharges))
             if (extraNourishment > 0) heads.add(HeadBifurcation("Extra Nourishment", extraNourishment))
             if (attendantCharges > 0) heads.add(HeadBifurcation("Attendant Charges", attendantCharges))
-            if (clothingDamage > 0) heads.add(HeadBifurcation("Damage to Clothing & Articles", clothingDamage))
+            if (clothingDamage > 0) heads.add(HeadBifurcation("Clothing Damage", clothingDamage))
             if (lossOfAmenities > 0) heads.add(HeadBifurcation("Loss of Amenities", lossOfAmenities))
         }
         ClaimMode.TEMPORARY -> {
-            if (tempInjuryComp > 0) {
-                heads.add(HeadBifurcation("Compensation for Injuries Sustained", tempInjuryComp))
-            }
+            if (tempInjuryComp > 0) heads.add(HeadBifurcation("Injury Compensation", tempInjuryComp))
             if (lossOfIncomeMonths > 0 && monthlyIncome > 0) {
-                heads.add(HeadBifurcation("Loss of Income (${lossOfIncomeMonths.toInt()} Months)", monthlyIncome * lossOfIncomeMonths))
+                heads.add(HeadBifurcation("Loss of Income (${lossOfIncomeMonths.toInt()}m)", monthlyIncome * lossOfIncomeMonths))
             }
             if (painAndSuffering > 0) heads.add(HeadBifurcation("Pain & Suffering", painAndSuffering))
-            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills & Treatment", medicalExpenses))
-            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation Charges", transportationCharges))
+            if (medicalExpenses > 0) heads.add(HeadBifurcation("Medical Bills", medicalExpenses))
+            if (transportationCharges > 0) heads.add(HeadBifurcation("Transportation", transportationCharges))
             if (extraNourishment > 0) heads.add(HeadBifurcation("Extra Nourishment", extraNourishment))
             if (attendantCharges > 0) heads.add(HeadBifurcation("Attendant Charges", attendantCharges))
-            if (clothingDamage > 0) heads.add(HeadBifurcation("Damage to Clothing & Articles", clothingDamage))
+            if (clothingDamage > 0) heads.add(HeadBifurcation("Clothing Damage", clothingDamage))
         }
     }
 
@@ -375,11 +412,86 @@ fun calculateCompensation(
     )
 }
 
+/**
+ * Compact, high-density single-line input field that automatically advances focus on Enter/Next.
+ */
+@Composable
+fun CompactInputBox(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    isNumber: Boolean = true,
+    imeAction: ImeAction = ImeAction.Next,
+    trailingIcon: @Composable (() -> Unit)? = null
+) {
+    val focusManager = LocalFocusManager.current
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = IconRoyalNavy,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White)
+                .border(1.dp, IconRoyalNavy.copy(alpha = 0.28f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = { newVal ->
+                        if (newVal.contains('\n')) {
+                            if (imeAction == ImeAction.Done) focusManager.clearFocus()
+                            else focusManager.moveFocus(FocusDirection.Next)
+                        } else {
+                            onValueChange(newVal)
+                        }
+                    },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = IconDeepNavy
+                    ),
+                    cursorBrush = SolidColor(IconRoyalNavy),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (isNumber) KeyboardType.Decimal else KeyboardType.Text,
+                        imeAction = imeAction
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Next) },
+                        onDone = { focusManager.clearFocus() }
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                if (trailingIcon != null) {
+                    trailingIcon()
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun McopCalculatorApp() {
+fun McopMainContainer() {
     val context = LocalContext.current
+    var currentScreen by remember { mutableStateOf(AppScreen.CALCULATOR) }
 
+    // Core Case State
     var mcopNumber by remember { mutableStateOf("20/2026") }
     var claimantName by remember { mutableStateOf("Jeeva") }
     var ageStr by remember { mutableStateOf("34") }
@@ -404,17 +516,25 @@ fun McopCalculatorApp() {
     var prospectsStr by remember { mutableStateOf("40") }
     var interestRateStr by remember { mutableStateOf("7.5") }
     var petitionDateLabel by remember { mutableStateOf("09-05-2024") }
-    var daysStr by remember { mutableStateOf("914") }
+    var daysStr by remember {
+        val initialDays = computeDaysFromPetitionDate("09-05-2024")?.toString() ?: "914"
+        mutableStateOf(initialDays)
+    }
     var customOfferStr by remember { mutableStateOf("") }
 
     var selectedMode by remember { mutableStateOf(ClaimMode.PARTIAL) }
+    var activeInputTab by remember { mutableStateOf(0) } // 0 = Case & Primary, 1 = Conventional Heads, 2 = Interest & Compromise
     var includeInterestInExport by remember { mutableStateOf(true) }
     var includeLokAdalatInExport by remember { mutableStateOf(true) }
 
-    // Saved Cases Vault State
-    var showSavedCasesDialog by remember { mutableStateOf(false) }
     var savedCasesList by remember { mutableStateOf(loadAllSavedCases(context)) }
-    var searchQuery by remember { mutableStateOf("") }
+
+    // Automatically recalculate days whenever petitionDateLabel changes
+    LaunchedEffect(petitionDateLabel) {
+        computeDaysFromPetitionDate(petitionDateLabel)?.let { calculatedDays ->
+            daysStr = calculatedDays.toString()
+        }
+    }
 
     val age = ageStr.toIntOrNull() ?: 34
     val monthlyIncome = monthlyIncomeStr.toDoubleOrNull() ?: 15000.0
@@ -433,7 +553,7 @@ fun McopCalculatorApp() {
     val amenities = amenitiesStr.toDoubleOrNull() ?: 0.0
     val prospects = prospectsStr.toDoubleOrNull() ?: 40.0
     val interestRate = interestRateStr.toDoubleOrNull() ?: 7.5
-    val days = daysStr.toLongOrNull() ?: 914L
+    val days = daysStr.toLongOrNull() ?: 0L
     val customOffer = customOfferStr.toDoubleOrNull()
 
     val result = remember(
@@ -450,941 +570,1024 @@ fun McopCalculatorApp() {
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+    val saveCurrentCase: () -> Unit = {
+        val timestamp = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
+        val record = SavedMcopCase(
+            id = mcopNumber.trim().ifEmpty { UUID.randomUUID().toString() },
+            mcopNumber = mcopNumber,
+            claimantName = claimantName,
+            claimModeName = selectedMode.name,
+            ageStr = ageStr,
+            monthlyIncomeStr = monthlyIncomeStr,
+            disabilityStr = disabilityStr,
+            ratePerPctStr = ratePerPctStr,
+            dependentsStr = dependentsStr,
+            pranaySethiSteps = pranaySethiSteps,
+            tempInjuryCompStr = tempInjuryCompStr,
+            lossOfIncomeMonthsStr = lossOfIncomeMonthsStr,
+            medicalStr = medicalStr,
+            futureMedicalStr = futureMedicalStr,
+            painSufferingStr = painSufferingStr,
+            transportStr = transportStr,
+            nourishmentStr = nourishmentStr,
+            attendantStr = attendantStr,
+            clothingDamageStr = clothingDamageStr,
+            amenitiesStr = amenitiesStr,
+            prospectsStr = prospectsStr,
+            interestRateStr = interestRateStr,
+            petitionDateLabel = petitionDateLabel,
+            daysStr = daysStr,
+            customOfferStr = customOfferStr,
+            savedAt = timestamp,
+            netAwardPreview = result.netAwardAmount.roundToLong()
+        )
+        savedCasesList = saveCaseToPrefs(context, record)
+        Toast.makeText(context, "Saved MCOP $mcopNumber ($claimantName)", Toast.LENGTH_SHORT).show()
+    }
+
+    if (currentScreen == AppScreen.SAVED_CASES) {
+        BackHandler { currentScreen = AppScreen.CALCULATOR }
+        SavedCasesPage(
+            savedCasesList = savedCasesList,
+            onBack = { currentScreen = AppScreen.CALCULATOR },
+            onSelectCase = { item ->
+                mcopNumber = item.mcopNumber
+                claimantName = item.claimantName
+                selectedMode = runCatching { ClaimMode.valueOf(item.claimModeName) }.getOrDefault(ClaimMode.PARTIAL)
+                ageStr = item.ageStr
+                monthlyIncomeStr = item.monthlyIncomeStr
+                disabilityStr = item.disabilityStr
+                ratePerPctStr = item.ratePerPctStr
+                dependentsStr = item.dependentsStr
+                pranaySethiSteps = item.pranaySethiSteps
+                tempInjuryCompStr = item.tempInjuryCompStr
+                lossOfIncomeMonthsStr = item.lossOfIncomeMonthsStr
+                medicalStr = item.medicalStr
+                futureMedicalStr = item.futureMedicalStr
+                painSufferingStr = item.painSufferingStr
+                transportStr = item.transportStr
+                nourishmentStr = item.nourishmentStr
+                attendantStr = item.attendantStr
+                clothingDamageStr = item.clothingDamageStr
+                amenitiesStr = item.amenitiesStr
+                prospectsStr = item.prospectsStr
+                interestRateStr = item.interestRateStr
+                petitionDateLabel = item.petitionDateLabel
+                daysStr = computeDaysFromPetitionDate(item.petitionDateLabel)?.toString() ?: item.daysStr
+                customOfferStr = item.customOfferStr
+                currentScreen = AppScreen.CALCULATOR
+                Toast.makeText(context, "Loaded MCOP ${item.mcopNumber}", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteCase = { id ->
+                savedCasesList = deleteCaseFromPrefs(context, id)
+            }
+        )
+    } else {
+        Scaffold(
+            topBar = {
+                Surface(
+                    color = IconRoyalNavy,
+                    shadowElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .border(1.5.dp, IconGoldRing, CircleShape)
+                                    .background(IconDeepNavy),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Balance,
+                                    contentDescription = null,
+                                    tint = IconGoldBright,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "MCOP Compensation Calculator",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Motor Accident Claims Portal • Today: ${LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy"))}",
+                                    fontSize = 10.sp,
+                                    color = IconGoldBright
+                                )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = IconDeepNavy,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, IconGoldRing),
+                                modifier = Modifier.clickable { saveCurrentCase() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Save, contentDescription = "Save", tint = IconGoldBright, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Save", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Surface(
+                                color = IconGoldRing,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.clickable {
+                                    savedCasesList = loadAllSavedCases(context)
+                                    currentScreen = AppScreen.SAVED_CASES
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.FolderOpen, contentDescription = "Vault", tint = IconDeepNavy, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Cases (${savedCasesList.size})", color = IconDeepNavy, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ) { padding ->
+            // Single-Viewport Non-Scrolling Dashboard Layout
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(CreamBg)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // 1. Compact Claim Mode Selector Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(IconDeepNavy)
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ClaimMode.values().forEach { mode ->
+                        val isSelected = selectedMode == mode
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(GoldAccent.copy(alpha = 0.2f)),
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) IconGoldRing else Color.Transparent)
+                                .clickable { selectedMode = mode }
+                                .padding(vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Balance,
-                                contentDescription = null,
-                                tint = GoldAccent,
-                                modifier = Modifier.size(22.dp)
+                            Text(
+                                text = mode.shortLabel,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) IconDeepNavy else Color.White
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                }
+
+                // 2. Tabbed Input Workbench (Fixed Height, Zero Vertical Scrolling)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CardWarmBg),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, IconRoyalNavy.copy(alpha = 0.15f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        // Input Section Switcher Tabs
+                        val tabTitles = listOf("1. Case & Primary", "2. Conventional Heads", "3. Interest & Lok Adalat")
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(NavyTintBg)
+                                .padding(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            tabTitles.forEachIndexed { idx, title ->
+                                val active = activeInputTab == idx
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(if (active) IconRoyalNavy else Color.Transparent)
+                                        .clickable { activeInputTab = idx }
+                                        .padding(vertical = 5.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = title,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (active) IconGoldBright else IconRoyalNavy,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Tab 0: Case & Primary Inputs
+                        if (activeInputTab == 0) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CompactInputBox(
+                                        value = mcopNumber,
+                                        onValueChange = { mcopNumber = it },
+                                        label = "MCOP No.",
+                                        isNumber = false,
+                                        modifier = Modifier.weight(0.9f)
+                                    )
+                                    CompactInputBox(
+                                        value = claimantName,
+                                        onValueChange = { claimantName = it },
+                                        label = "Claimant Name",
+                                        isNumber = false,
+                                        modifier = Modifier.weight(1.3f)
+                                    )
+                                    CompactInputBox(
+                                        value = ageStr,
+                                        onValueChange = { ageStr = it },
+                                        label = "Age (M:${result.multiplier})",
+                                        modifier = Modifier.weight(0.8f)
+                                    )
+                                }
+
+                                when (selectedMode) {
+                                    ClaimMode.FATAL -> {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            CompactInputBox(
+                                                value = monthlyIncomeStr,
+                                                onValueChange = { monthlyIncomeStr = it },
+                                                label = "Monthly Income ₹",
+                                                modifier = Modifier.weight(1.1f)
+                                            )
+                                            CompactInputBox(
+                                                value = dependentsStr,
+                                                onValueChange = { dependentsStr = it },
+                                                label = "Dependents",
+                                                modifier = Modifier.weight(0.8f)
+                                            )
+                                            CompactInputBox(
+                                                value = prospectsStr,
+                                                onValueChange = { prospectsStr = it },
+                                                label = "Future Prosp. %",
+                                                imeAction = ImeAction.Done,
+                                                modifier = Modifier.weight(0.9f)
+                                            )
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text("Pranay 10% Step:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = IconRoyalNavy)
+                                            val steps = listOf("Base 40k", "+10% 44k", "+21% 48.4k", "+33% 53.2k")
+                                            steps.forEachIndexed { idx, sLabel ->
+                                                val sel = pranaySethiSteps == idx
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(5.dp))
+                                                        .background(if (sel) IconGoldRing else NavyTintBg)
+                                                        .clickable { pranaySethiSteps = idx }
+                                                        .padding(vertical = 4.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(sLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = IconDeepNavy)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ClaimMode.PERMANENT -> {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            CompactInputBox(
+                                                value = monthlyIncomeStr,
+                                                onValueChange = { monthlyIncomeStr = it },
+                                                label = "Monthly Income ₹",
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CompactInputBox(
+                                                value = disabilityStr,
+                                                onValueChange = { disabilityStr = it },
+                                                label = "Functional Disab %",
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CompactInputBox(
+                                                value = prospectsStr,
+                                                onValueChange = { prospectsStr = it },
+                                                label = "Future Prosp %",
+                                                imeAction = ImeAction.Done,
+                                                modifier = Modifier.weight(0.9f)
+                                            )
+                                        }
+                                    }
+                                    ClaimMode.PARTIAL -> {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            CompactInputBox(
+                                                value = monthlyIncomeStr,
+                                                onValueChange = { monthlyIncomeStr = it },
+                                                label = "Monthly Income ₹",
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CompactInputBox(
+                                                value = disabilityStr,
+                                                onValueChange = { disabilityStr = it },
+                                                label = "Disability %",
+                                                modifier = Modifier.weight(0.8f)
+                                            )
+                                            CompactInputBox(
+                                                value = ratePerPctStr,
+                                                onValueChange = { ratePerPctStr = it },
+                                                label = "Rate per % (₹)",
+                                                imeAction = ImeAction.Done,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                    ClaimMode.TEMPORARY -> {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            CompactInputBox(
+                                                value = tempInjuryCompStr,
+                                                onValueChange = { tempInjuryCompStr = it },
+                                                label = "Injury Compensation ₹",
+                                                modifier = Modifier.weight(1.2f)
+                                            )
+                                            CompactInputBox(
+                                                value = monthlyIncomeStr,
+                                                onValueChange = { monthlyIncomeStr = it },
+                                                label = "Monthly Income ₹",
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            CompactInputBox(
+                                                value = lossOfIncomeMonthsStr,
+                                                onValueChange = { lossOfIncomeMonthsStr = it },
+                                                label = "Loss Months",
+                                                imeAction = ImeAction.Done,
+                                                modifier = Modifier.weight(0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Tab 1: Conventional & Pecuniary Heads
+                        if (activeInputTab == 1) {
+                            if (selectedMode == ClaimMode.FATAL) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CompactInputBox(
+                                        value = transportStr,
+                                        onValueChange = { transportStr = it },
+                                        label = "Transport / Ambulance ₹",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    CompactInputBox(
+                                        value = medicalStr,
+                                        onValueChange = { medicalStr = it },
+                                        label = "Pre-Death Medical ₹",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    CompactInputBox(
+                                        value = clothingDamageStr,
+                                        onValueChange = { clothingDamageStr = it },
+                                        label = "Clothing & Articles ₹",
+                                        imeAction = ImeAction.Done,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        CompactInputBox(
+                                            value = painSufferingStr,
+                                            onValueChange = { painSufferingStr = it },
+                                            label = "Pain & Suffering ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = medicalStr,
+                                            onValueChange = { medicalStr = it },
+                                            label = "Medical Bills ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = futureMedicalStr,
+                                            onValueChange = { futureMedicalStr = it },
+                                            label = "Future Medical ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = lossOfIncomeMonthsStr,
+                                            onValueChange = { lossOfIncomeMonthsStr = it },
+                                            label = "Loss Months",
+                                            modifier = Modifier.weight(0.75f)
+                                        )
+                                    }
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        CompactInputBox(
+                                            value = transportStr,
+                                            onValueChange = { transportStr = it },
+                                            label = "Transportation ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = nourishmentStr,
+                                            onValueChange = { nourishmentStr = it },
+                                            label = "Nourishment ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = attendantStr,
+                                            onValueChange = { attendantStr = it },
+                                            label = "Attendant ₹",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        CompactInputBox(
+                                            value = amenitiesStr,
+                                            onValueChange = { amenitiesStr = it },
+                                            label = "Amenities ₹",
+                                            imeAction = ImeAction.Done,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Tab 2: Automatic Petition Date -> Days & Lok Adalat Controls
+                        if (activeInputTab == 2) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CompactInputBox(
+                                        value = petitionDateLabel,
+                                        onValueChange = {
+                                            petitionDateLabel = it
+                                            computeDaysFromPetitionDate(it)?.let { d -> daysStr = d.toString() }
+                                        },
+                                        label = "Petition Date (DD-MM-YYYY)",
+                                        isNumber = false,
+                                        modifier = Modifier.weight(1.3f),
+                                        trailingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.CalendarMonth,
+                                                contentDescription = "Pick Date",
+                                                tint = IconRoyalNavy,
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .clickable {
+                                                        val cal = Calendar.getInstance()
+                                                        DatePickerDialog(
+                                                            context,
+                                                            { _, y, m, d ->
+                                                                val formatted = String.format(Locale.US, "%02d-%02d-%04d", d, m + 1, y)
+                                                                petitionDateLabel = formatted
+                                                                computeDaysFromPetitionDate(formatted)?.let { calc ->
+                                                                    daysStr = calc.toString()
+                                                                }
+                                                            },
+                                                            cal.get(Calendar.YEAR),
+                                                            cal.get(Calendar.MONTH),
+                                                            cal.get(Calendar.DAY_OF_MONTH)
+                                                        ).show()
+                                                    }
+                                            )
+                                        }
+                                    )
+                                    CompactInputBox(
+                                        value = daysStr,
+                                        onValueChange = { daysStr = it },
+                                        label = "Auto Days (Till Today)",
+                                        modifier = Modifier.weight(0.95f)
+                                    )
+                                    CompactInputBox(
+                                        value = interestRateStr,
+                                        onValueChange = { interestRateStr = it },
+                                        label = "Interest %",
+                                        modifier = Modifier.weight(0.75f)
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CompactInputBox(
+                                        value = customOfferStr,
+                                        onValueChange = { customOfferStr = it },
+                                        label = "Custom Lok Adalat Offer ₹ (Blank = 85%)",
+                                        imeAction = ImeAction.Done,
+                                        modifier = Modifier.weight(1.3f)
+                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(NavyTintBg)
+                                            .clickable { includeInterestInExport = !includeInterestInExport }
+                                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = includeInterestInExport,
+                                            onCheckedChange = { includeInterestInExport = it },
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Int.", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = IconDeepNavy)
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(GoldTintBg)
+                                            .clickable { includeLokAdalatInExport = !includeLokAdalatInExport }
+                                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = includeLokAdalatInExport,
+                                            onCheckedChange = { includeLokAdalatInExport = it },
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Lok Adalat", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = IconDeepNavy)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Executive Live Head-Wise Bifurcation & Summary Viewport (Fills Remaining Screen Space)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(3.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, IconGoldRing.copy(alpha = 0.7f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Header Strip
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "HEAD-WISE BIFURCATION",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = IconRoyalNavy,
+                                        fontSize = 12.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "(${selectedMode.shortLabel} • $mcopNumber • $claimantName)",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = IconBadgeBlue
+                                    )
+                                }
+                                Surface(
+                                    color = IconRoyalNavy,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "Ann. Inc: ${formatInr(result.netAnnualIncome)} | M:${result.multiplier}",
+                                        color = IconGoldBright,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            HorizontalDivider(color = IconRoyalNavy.copy(alpha = 0.15f))
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Two-Column Compact Grid for All Active Heads (Fits up to 10 Heads Without Scrolling)
+                            val chunkedHeads = result.heads.chunked(2)
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                chunkedHeads.forEach { rowItems ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        rowItems.forEach { head ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(NavyTintBg.copy(alpha = 0.6f))
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = head.headName,
+                                                    fontSize = 10.sp,
+                                                    color = IconDeepNavy,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = formatInr(head.amount),
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = IconRoyalNavy
+                                                )
+                                            }
+                                        }
+                                        if (rowItems.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom Financial Metrics Strip (Principal, Interest, Total, Lok Adalat)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            HorizontalDivider(color = IconRoyalNavy.copy(alpha = 0.15f))
+
+                            // Row 1: Principal + Interest + Total Payable KPI Boxes
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // Net Principal Box
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(NavyTintBg)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text("NET PRINCIPAL AWARD", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = IconRoyalNavy)
+                                    Text(formatInr(result.netAwardAmount), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = IconDeepNavy)
+                                }
+
+                                if (includeInterestInExport) {
+                                    // Interest Box
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFFE8F8F5))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("INT (${interestRate}% • $days d)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = EmeraldGreen)
+                                        Text("+ ${formatInr(result.interestAmount)}", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = EmeraldGreen)
+                                    }
+
+                                    // Total Payable Today Box
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1.1f)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFFFDEDEC))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("TOTAL PAYABLE TODAY", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = CrimsonRed)
+                                        Text(formatInr(result.totalPayableWithInterest), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = CrimsonRed)
+                                    }
+                                }
+                            }
+
+                            // Row 2: Lok Adalat Compromise Banner
+                            if (includeLokAdalatInExport) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(GoldTintBg)
+                                        .border(1.dp, IconGoldRing.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "LOK ADALAT COMPROMISE (CONSOLIDATED • NO INT)",
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = IconDeepNavy
+                                        )
+                                        Text(
+                                            text = "Proposed Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%): ${formatInr(result.compromiseOfferAmount)}",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = RoyalPurple
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Max NPV Ceiling", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = IconRoyalNavy)
+                                        Text(formatInr(result.npvMaxCompromiseCeiling), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = IconRoyalNavy)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. Bottom Action Bar (Fixed at Bottom of Viewport)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val text = formatExportText(
+                                mcopNumber, claimantName, age, petitionDateLabel, days,
+                                interestRate, selectedMode, result,
+                                includeInterestInExport, includeLokAdalatInExport
+                            )
+                            shareText(context, text)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = IconRoyalNavy),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, tint = IconGoldBright, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("WhatsApp Memo", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            exportPdfMemo(
+                                context, mcopNumber, claimantName, age, petitionDateLabel, days,
+                                interestRate, selectedMode, result,
+                                includeInterestInExport, includeLokAdalatInExport
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = IconBadgeBlue),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("PDF Memo", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            exportCsvForSheets(
+                                context, mcopNumber, claimantName, age, selectedMode,
+                                result, includeInterestInExport
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(0.75f)
+                            .height(38.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, IconRoyalNavy),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.TableChart, contentDescription = null, tint = IconRoyalNavy, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("CSV", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = IconRoyalNavy)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Full-Screen Page to View, Search, Load, and Delete Saved MCOP Cases.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SavedCasesPage(
+    savedCasesList: List<SavedMcopCase>,
+    onBack: () -> Unit,
+    onSelectCase: (SavedMcopCase) -> Unit,
+    onDeleteCase: (String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredList = remember(savedCasesList, searchQuery) {
+        if (searchQuery.isBlank()) {
+            savedCasesList
+        } else {
+            val q = searchQuery.trim().lowercase()
+            savedCasesList.filter {
+                it.mcopNumber.lowercase().contains(q) ||
+                    it.claimantName.lowercase().contains(q) ||
+                    it.claimModeName.lowercase().contains(q)
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            Surface(color = IconRoyalNavy, shadowElevation = 4.dp) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = IconGoldBright)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "MCOP Compensation Calculator",
+                                text = "Saved MCOP Cases Directory",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = Color.White
                             )
                             Text(
-                                text = "Motor Accident Claims Portal • Saved: ${savedCasesList.size}",
+                                text = "${savedCasesList.size} Total Records Stored on Device",
                                 fontSize = 11.sp,
-                                color = Color(0xFFD4E6F1)
+                                color = IconGoldBright
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = PrimaryNavy,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                ),
-                actions = {
-                    IconButton(onClick = {
-                        val timestamp = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
-                        val record = SavedMcopCase(
-                            id = mcopNumber.trim().ifEmpty { UUID.randomUUID().toString() },
-                            mcopNumber = mcopNumber,
-                            claimantName = claimantName,
-                            claimModeName = selectedMode.name,
-                            ageStr = ageStr,
-                            monthlyIncomeStr = monthlyIncomeStr,
-                            disabilityStr = disabilityStr,
-                            ratePerPctStr = ratePerPctStr,
-                            dependentsStr = dependentsStr,
-                            pranaySethiSteps = pranaySethiSteps,
-                            tempInjuryCompStr = tempInjuryCompStr,
-                            lossOfIncomeMonthsStr = lossOfIncomeMonthsStr,
-                            medicalStr = medicalStr,
-                            futureMedicalStr = futureMedicalStr,
-                            painSufferingStr = painSufferingStr,
-                            transportStr = transportStr,
-                            nourishmentStr = nourishmentStr,
-                            attendantStr = attendantStr,
-                            clothingDamageStr = clothingDamageStr,
-                            amenitiesStr = amenitiesStr,
-                            prospectsStr = prospectsStr,
-                            interestRateStr = interestRateStr,
-                            petitionDateLabel = petitionDateLabel,
-                            daysStr = daysStr,
-                            customOfferStr = customOfferStr,
-                            savedAt = timestamp,
-                            netAwardPreview = result.netAwardAmount.roundToLong()
+
+                    Surface(
+                        color = IconGoldRing,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.clickable { onBack() }
+                    ) {
+                        Text(
+                            text = "New / Calculator",
+                            color = IconDeepNavy,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
-                        savedCasesList = saveCaseToPrefs(context, record)
-                        Toast.makeText(context, "Saved MCOP $mcopNumber ($claimantName)", Toast.LENGTH_SHORT).show()
-                    }) {
-                        Icon(Icons.Default.Save, contentDescription = "Save Case")
-                    }
-                    IconButton(onClick = {
-                        savedCasesList = loadAllSavedCases(context)
-                        showSavedCasesDialog = true
-                    }) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = "Find Saved Case")
                     }
                 }
-            )
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(SurfaceBg)
-                .verticalScroll(rememberScrollState())
+                .background(CreamBg)
                 .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Quick Case Vault Banner
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(2.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search by MCOP Number, Claimant Name, or Category...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = IconRoyalNavy) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            if (filteredList.isEmpty()) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "CASE VAULT & ARCHIVE",
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy,
-                            fontSize = 12.sp
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOff,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(48.dp)
                         )
-                        Text(
-                            text = "${savedCasesList.size} saved case(s) stored on device",
-                            fontSize = 11.sp,
-                            color = Color.Gray
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                savedCasesList = loadAllSavedCases(context)
-                                showSavedCasesDialog = true
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Find Case", fontSize = 12.sp)
-                        }
-                        Button(
-                            onClick = {
-                                val timestamp = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(Date())
-                                val record = SavedMcopCase(
-                                    id = mcopNumber.trim().ifEmpty { UUID.randomUUID().toString() },
-                                    mcopNumber = mcopNumber,
-                                    claimantName = claimantName,
-                                    claimModeName = selectedMode.name,
-                                    ageStr = ageStr,
-                                    monthlyIncomeStr = monthlyIncomeStr,
-                                    disabilityStr = disabilityStr,
-                                    ratePerPctStr = ratePerPctStr,
-                                    dependentsStr = dependentsStr,
-                                    pranaySethiSteps = pranaySethiSteps,
-                                    tempInjuryCompStr = tempInjuryCompStr,
-                                    lossOfIncomeMonthsStr = lossOfIncomeMonthsStr,
-                                    medicalStr = medicalStr,
-                                    futureMedicalStr = futureMedicalStr,
-                                    painSufferingStr = painSufferingStr,
-                                    transportStr = transportStr,
-                                    nourishmentStr = nourishmentStr,
-                                    attendantStr = attendantStr,
-                                    clothingDamageStr = clothingDamageStr,
-                                    amenitiesStr = amenitiesStr,
-                                    prospectsStr = prospectsStr,
-                                    interestRateStr = interestRateStr,
-                                    petitionDateLabel = petitionDateLabel,
-                                    daysStr = daysStr,
-                                    customOfferStr = customOfferStr,
-                                    savedAt = timestamp,
-                                    netAwardPreview = result.netAwardAmount.roundToLong()
-                                )
-                                savedCasesList = saveCaseToPrefs(context, record)
-                                Toast.makeText(context, "Case Saved: $mcopNumber", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Save", fontSize = 12.sp)
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No saved MCOP cases found.", color = Color.Gray, fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
-
-            // Mode Selection Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(2.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "CLAIM CATEGORY",
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        ClaimMode.values().forEachIndexed { index, mode ->
-                            SegmentedButton(
-                                selected = selectedMode == mode,
-                                onClick = { selectedMode = mode },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = ClaimMode.values().size
-                                ),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = PrimaryNavy,
-                                    activeContentColor = Color.White,
-                                    inactiveContainerColor = Color.White,
-                                    inactiveContentColor = PrimaryNavy
-                                )
-                            ) {
-                                Text(mode.shortLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 1. Case & Income Parameters Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(2.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "1. CASE & CLAIMANT PARAMETERS",
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy,
-                        fontSize = 13.sp
-                    )
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
-                            value = mcopNumber,
-                            onValueChange = { mcopNumber = it },
-                            label = { Text("MCOP No.") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = claimantName,
-                            onValueChange = { claimantName = it },
-                            label = { Text("Claimant Name") },
-                            modifier = Modifier.weight(1.3f),
-                            singleLine = true
-                        )
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
-                            value = ageStr,
-                            onValueChange = { ageStr = it },
-                            label = { Text("Age (Yrs)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = monthlyIncomeStr,
-                            onValueChange = { monthlyIncomeStr = it },
-                            label = { Text("Monthly Income (₹)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1.3f),
-                            singleLine = true
-                        )
-                    }
-
-                    when (selectedMode) {
-                        ClaimMode.FATAL -> {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = dependentsStr,
-                                    onValueChange = { dependentsStr = it },
-                                    label = { Text("No. of Dependents") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = prospectsStr,
-                                    onValueChange = { prospectsStr = it },
-                                    label = { Text("Future Prospects %") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Pranay Sethi 10% Escalation (Every 3 Yrs on Consortium/Estate/Funeral)",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PrimaryNavy
-                            )
-                            val stepOptions = listOf("Base (₹40k)", "+10% (₹44k)", "+21% (₹48.4k)", "+33% (₹53.2k)")
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                stepOptions.forEachIndexed { idx, label ->
-                                    SegmentedButton(
-                                        selected = pranaySethiSteps == idx,
-                                        onClick = { pranaySethiSteps = idx },
-                                        shape = SegmentedButtonDefaults.itemShape(index = idx, count = stepOptions.size)
-                                    ) {
-                                        Text(label, fontSize = 10.sp)
-                                    }
-                                }
-                            }
-                        }
-                        ClaimMode.PERMANENT -> {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = disabilityStr,
-                                    onValueChange = { disabilityStr = it },
-                                    label = { Text("Functional Disab. %") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = prospectsStr,
-                                    onValueChange = { prospectsStr = it },
-                                    label = { Text("Future Prospects %") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        }
-                        ClaimMode.PARTIAL -> {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = disabilityStr,
-                                    onValueChange = { disabilityStr = it },
-                                    label = { Text("Disability %") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = ratePerPctStr,
-                                    onValueChange = { ratePerPctStr = it },
-                                    label = { Text("Rate per % (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        }
-                        ClaimMode.TEMPORARY -> {
-                            OutlinedTextField(
-                                value = tempInjuryCompStr,
-                                onValueChange = { tempInjuryCompStr = it },
-                                label = { Text("Injury Compensation (For Injuries Sustained ₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 2. All Conventional & Pecuniary Heads Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(2.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (selectedMode == ClaimMode.FATAL) "2. FATAL PECUNIARY HEADS & INTEREST" else "2. ALL INJURY CONVENTIONAL HEADS & INTEREST",
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy,
-                        fontSize = 13.sp
-                    )
-
-                    if (selectedMode == ClaimMode.FATAL) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedTextField(
-                                value = transportStr,
-                                onValueChange = { transportStr = it },
-                                label = { Text("Transport/Ambulance (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = medicalStr,
-                                onValueChange = { medicalStr = it },
-                                label = { Text("Pre-Death Medical (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-                        OutlinedTextField(
-                            value = clothingDamageStr,
-                            onValueChange = { clothingDamageStr = it },
-                            label = { Text("Damage to Clothing & Articles (₹)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                    } else {
-                        // Complete set of Injury Heads
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedTextField(
-                                value = lossOfIncomeMonthsStr,
-                                onValueChange = { lossOfIncomeMonthsStr = it },
-                                label = { Text("Treatment Loss (Months)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = painSufferingStr,
-                                onValueChange = { painSufferingStr = it },
-                                label = { Text("Pain & Suffering (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedTextField(
-                                value = medicalStr,
-                                onValueChange = { medicalStr = it },
-                                label = { Text("Medical Bills (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            if (selectedMode != ClaimMode.TEMPORARY) {
-                                OutlinedTextField(
-                                    value = futureMedicalStr,
-                                    onValueChange = { futureMedicalStr = it },
-                                    label = { Text("Future Medical (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            } else {
-                                OutlinedTextField(
-                                    value = transportStr,
-                                    onValueChange = { transportStr = it },
-                                    label = { Text("Transportation (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        }
-
-                        if (selectedMode != ClaimMode.TEMPORARY) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = transportStr,
-                                    onValueChange = { transportStr = it },
-                                    label = { Text("Transportation (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = nourishmentStr,
-                                    onValueChange = { nourishmentStr = it },
-                                    label = { Text("Extra Nourishment (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        } else {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = nourishmentStr,
-                                    onValueChange = { nourishmentStr = it },
-                                    label = { Text("Extra Nourishment (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = attendantStr,
-                                    onValueChange = { attendantStr = it },
-                                    label = { Text("Attendant Charges (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                        }
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (selectedMode != ClaimMode.TEMPORARY) {
-                                OutlinedTextField(
-                                    value = attendantStr,
-                                    onValueChange = { attendantStr = it },
-                                    label = { Text("Attendant Charges (₹)") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                            OutlinedTextField(
-                                value = clothingDamageStr,
-                                onValueChange = { clothingDamageStr = it },
-                                label = { Text("Damage to Clothing (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-
-                        if (selectedMode != ClaimMode.TEMPORARY) {
-                            OutlinedTextField(
-                                value = amenitiesStr,
-                                onValueChange = { amenitiesStr = it },
-                                label = { Text("Loss of Amenities / Marriage Prospects (₹)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = petitionDateLabel,
-                            onValueChange = { petitionDateLabel = it },
-                            label = { Text("Petition Date") },
-                            modifier = Modifier.weight(1.2f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = daysStr,
-                            onValueChange = { daysStr = it },
-                            label = { Text("Days") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(0.8f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = interestRateStr,
-                            onValueChange = { interestRateStr = it },
-                            label = { Text("Int %") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(0.8f),
-                            singleLine = true
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = customOfferStr,
-                        onValueChange = { customOfferStr = it },
-                        label = { Text("Custom Lok Adalat Offer ₹ (Leave blank for 85% auto)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-            }
-
-            // Head-Wise Bifurcation Live Summary Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = LightBlueBg),
-                elevation = CardDefaults.cardElevation(3.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "HEAD-WISE BIFURCATION",
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryNavy,
-                            fontSize = 14.sp
-                        )
-                        Surface(
-                            color = PrimaryNavy,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = "Age: $age | Mult: ${result.multiplier}",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
-
-                    result.heads.forEachIndexed { idx, head ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "${idx + 1}. ${head.headName}",
-                                fontSize = 13.sp,
-                                color = Color(0xFF1C2833),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = formatInr(head.amount),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1C2833)
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("NET PRINCIPAL AWARD:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PrimaryNavy)
-                        Text(formatInr(result.netAwardAmount), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = PrimaryNavy)
-                    }
-
-                    if (includeInterestInExport) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Interest (${interestRate}% from $petitionDateLabel • $days days):",
-                                fontSize = 12.sp,
-                                color = AccentGreen
-                            )
-                            Text(
-                                text = "+ ${formatInr(result.interestAmount)}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AccentGreen
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("TOTAL PAYABLE TODAY:", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = AccentRed)
-                            Text(formatInr(result.totalPayableWithInterest), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = AccentRed)
-                        }
-                    }
-
-                    if (includeLokAdalatInExport) {
-                        HorizontalDivider(color = PrimaryNavy.copy(alpha = 0.2f))
-                        Text(
-                            text = "LOK ADALAT COMPROMISE ANALYSIS (NO SEPARATE INTEREST)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = AccentPurple
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "• Consolidated Lump Sum Offer (${String.format(Locale.US, "%.1f", result.compromisePercentageOfTotal)}%):",
-                                fontSize = 13.sp,
-                                color = AccentPurple
-                            )
-                            Text(
-                                text = formatInr(result.compromiseOfferAmount),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = AccentPurple
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("• Max NPV Settlement Ceiling:", fontSize = 13.sp, color = AccentPurple)
-                            Text(formatInr(result.npvMaxCompromiseCeiling), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentPurple)
-                        }
-                    }
-                }
-            }
-
-            // 3. Export & Share Controls Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(2.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "3. EXPORT & SHARE CONTROLS",
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryNavy,
-                        fontSize = 13.sp
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Include Interest Projection", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text("Turn off to export Principal Award or Lok Adalat only", fontSize = 11.sp, color = Color.Gray)
-                        }
-                        Switch(
-                            checked = includeInterestInExport,
-                            onCheckedChange = { includeInterestInExport = it }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Include Lok Adalat Compromise Section", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text("Lump-sum compromise without interest breakdown", fontSize = 11.sp, color = Color.Gray)
-                        }
-                        Switch(
-                            checked = includeLokAdalatInExport,
-                            onCheckedChange = { includeLokAdalatInExport = it }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val text = formatExportText(
-                                    mcopNumber, claimantName, age, petitionDateLabel, days,
-                                    interestRate, selectedMode, result,
-                                    includeInterestInExport, includeLokAdalatInExport
-                                )
-                                shareText(context, text)
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryNavy),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("WhatsApp", fontSize = 12.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                exportPdfMemo(
-                                    context, mcopNumber, claimantName, age, petitionDateLabel, days,
-                                    interestRate, selectedMode, result,
-                                    includeInterestInExport, includeLokAdalatInExport
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryBlue),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("PDF Memo", fontSize = 12.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                exportCsvForSheets(
-                                    context, mcopNumber, claimantName, age, selectedMode,
-                                    result, includeInterestInExport
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("CSV", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Saved Cases Search & Load Modal Dialog
-    if (showSavedCasesDialog) {
-        val filteredList = remember(savedCasesList, searchQuery) {
-            if (searchQuery.isBlank()) {
-                savedCasesList
             } else {
-                val q = searchQuery.trim().lowercase()
-                savedCasesList.filter {
-                    it.mcopNumber.lowercase().contains(q) ||
-                        it.claimantName.lowercase().contains(q) ||
-                        it.claimModeName.lowercase().contains(q)
-                }
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { showSavedCasesDialog = false },
-            title = {
-                Column {
-                    Text("Saved MCOP Cases Vault", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = PrimaryNavy)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search MCOP No. or Claimant Name...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-            },
-            text = {
-                if (filteredList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No matching saved cases found.", color = Color.Gray, fontSize = 13.sp)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 360.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(filteredList) { item ->
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = LightBlueBg),
-                                shape = RoundedCornerShape(8.dp),
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(filteredList) { item ->
+                        val autoDays = computeDaysFromPetitionDate(item.petitionDateLabel) ?: (item.daysStr.toLongOrNull() ?: 0L)
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(2.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, IconRoyalNavy.copy(alpha = 0.2f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectCase(item) }
+                        ) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        mcopNumber = item.mcopNumber
-                                        claimantName = item.claimantName
-                                        selectedMode = runCatching { ClaimMode.valueOf(item.claimModeName) }.getOrDefault(ClaimMode.PARTIAL)
-                                        ageStr = item.ageStr
-                                        monthlyIncomeStr = item.monthlyIncomeStr
-                                        disabilityStr = item.disabilityStr
-                                        ratePerPctStr = item.ratePerPctStr
-                                        dependentsStr = item.dependentsStr
-                                        pranaySethiSteps = item.pranaySethiSteps
-                                        tempInjuryCompStr = item.tempInjuryCompStr
-                                        lossOfIncomeMonthsStr = item.lossOfIncomeMonthsStr
-                                        medicalStr = item.medicalStr
-                                        futureMedicalStr = item.futureMedicalStr
-                                        painSufferingStr = item.painSufferingStr
-                                        transportStr = item.transportStr
-                                        nourishmentStr = item.nourishmentStr
-                                        attendantStr = item.attendantStr
-                                        clothingDamageStr = item.clothingDamageStr
-                                        amenitiesStr = item.amenitiesStr
-                                        prospectsStr = item.prospectsStr
-                                        interestRateStr = item.interestRateStr
-                                        petitionDateLabel = item.petitionDateLabel
-                                        daysStr = item.daysStr
-                                        customOfferStr = item.customOfferStr
-                                        showSavedCasesDialog = false
-                                        Toast.makeText(context, "Loaded MCOP ${item.mcopNumber}", Toast.LENGTH_SHORT).show()
-                                    }
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            color = IconRoyalNavy,
+                                            shape = RoundedCornerShape(5.dp)
+                                        ) {
+                                            Text(
+                                                text = "MCOP ${item.mcopNumber}",
+                                                color = IconGoldBright,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "MCOP ${item.mcopNumber} • ${item.claimantName}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = PrimaryNavy
-                                        )
-                                        Text(
-                                            text = "${item.claimModeName} | Net Award: ${formatInr(item.netAwardPreview.toDouble())}",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = AccentGreen
-                                        )
-                                        Text(
-                                            text = "Saved: ${item.savedAt}",
-                                            fontSize = 10.sp,
-                                            color = Color.Gray
+                                            text = item.claimantName,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 15.sp,
+                                            color = IconDeepNavy
                                         )
                                     }
-                                    IconButton(onClick = {
-                                        savedCasesList = deleteCaseFromPrefs(context, item.id)
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AccentRed)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "Category: ${item.claimModeName} • Age: ${item.ageStr} Yrs • Income: ₹${item.monthlyIncomeStr}/m",
+                                        fontSize = 12.sp,
+                                        color = Color.DarkGray
+                                    )
+                                    Text(
+                                        text = "Net Principal Award: ${formatInr(item.netAwardPreview.toDouble())} • Petition: ${item.petitionDateLabel} ($autoDays days)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = EmeraldGreen
+                                    )
+                                    Text(
+                                        text = "Last Saved: ${item.savedAt}",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { onSelectCase(item) }) {
+                                        Icon(Icons.Default.EditNote, contentDescription = "Open Case", tint = IconRoyalNavy)
+                                    }
+                                    IconButton(onClick = { onDeleteCase(item.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete Case", tint = CrimsonRed)
                                     }
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSavedCasesDialog = false }) {
-                    Text("Close")
-                }
             }
-        )
+        }
     }
 }
 
@@ -1568,7 +1771,7 @@ fun exportPdfMemo(
         val titlePaint = Paint().apply {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textSize = 13f
-            color = android.graphics.Color.rgb(27, 79, 114)
+            color = android.graphics.Color.rgb(21, 67, 96)
             textAlign = Paint.Align.CENTER
         }
         val subHeaderPaint = Paint().apply {
